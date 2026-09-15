@@ -900,5 +900,30 @@
     "surface_loading": "{{name}} を読み込んでいます…",
     "surface_unavailable": "{{name}} のインターフェースを読み込めません。インストール済みのバージョンに含まれていない可能性があります。",
     "surface_navigated": "{{name}} がパネルを外部から読み込んだページに置き換えようとしました。停止して接続を切りました。ワークスペース管理者に知らせてください。"
+  },
+  "run_canvas": {
+    "section": "実行チェーン",
+    "run_count_other": "{{count}} 実行",
+    "running_other": "{{count}} 実行中",
+    "waiting": "レビュー待ち",
+    "expand": "キャンバスを拡大",
+    "briefing": "{{name}}",
+    "result": "結果",
+    "empty_result": "まだ結果がありません。",
+    "instruction": "指示",
+    "tool_call": "ツール呼び出し",
+    "thinking": "思考",
+    "task": "タスク",
+    "process": "作業過程",
+    "expand_all": "すべて展開",
+    "collapse": "折りたたむ",
+    "verb_run": "実行",
+    "verb_read": "読み取り",
+    "verb_list": "一覧",
+    "verb_write": "書き込み",
+    "truncated": "切り詰め",
+    "done": "完了",
+    "thinking_count_other": "思考 {{count}} 件",
+    "tools_count_other": "ツール {{count}} 件"
   }
 }

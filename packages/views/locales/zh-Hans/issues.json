@@ -900,5 +900,30 @@
     "surface_loading": "正在加载 {{name}}…",
     "surface_unavailable": "{{name}} 的界面无法加载，已安装的版本可能不包含它。",
     "surface_navigated": "{{name}} 试图把面板替换成从别处加载的页面。已经拦下并断开连接，建议告知工作区管理员。"
+  },
+  "run_canvas": {
+    "section": "运行链路",
+    "run_count_other": "{{count}} 个运行",
+    "running_other": "{{count}} 个运行中",
+    "waiting": "等待检查",
+    "expand": "放大画布",
+    "briefing": "{{name}}",
+    "result": "结果",
+    "empty_result": "还没有写出结果。",
+    "instruction": "指令",
+    "tool_call": "工具调用",
+    "thinking": "思考",
+    "task": "任务",
+    "process": "工作过程",
+    "expand_all": "展开全部",
+    "collapse": "收起",
+    "verb_run": "运行",
+    "verb_read": "读取",
+    "verb_list": "列出",
+    "verb_write": "写入",
+    "truncated": "已截断",
+    "done": "已完成",
+    "thinking_count_other": "{{count}} 条思考",
+    "tools_count_other": "{{count}} 个工具"
   }
 }

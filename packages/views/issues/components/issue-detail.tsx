@@ -60,7 +60,7 @@ import { AvatarGroup, AvatarGroupCount } from "@multica/ui/components/ui/avatar"
 import { ActorAvatar } from "../../common/actor-avatar";
 import { PropRow } from "../../common/prop-row";
 import { PropertyIcon } from "../../common/property-icon";
-import type { Attachment, Issue, IssueProperty, IssueStatus, IssueStatusCategory, IssuePriority, TimelineEntry, UpdateIssueRequest } from "@multica/core/types";
+import type { AgentTask, Attachment, Issue, IssueProperty, IssueStatus, IssueStatusCategory, IssuePriority, TimelineEntry, UpdateIssueRequest } from "@multica/core/types";
 import { contentReferencesAttachment } from "@multica/core/types";
 import { isBuiltInIssueStatus } from "@multica/core/issue-statuses";
 import { commentLandingTarget } from "@multica/core/issues/comment-deletion";
@@ -92,6 +92,8 @@ import { ThreadMinimap, type ThreadMinimapThread } from "./thread-minimap";
 import { collectThreadParticipants, collectThreadReplies, deriveThreadResolution } from "./thread-utils";
 import { IssueAgentHeaderChip } from "./issue-agent-header-chip";
 import { ExecutionLogSection } from "./execution-log-section";
+import { RunChainSection } from "./run-canvas/run-canvas-section";
+import { RunInspector } from "./run-canvas/run-briefing";
 import { QuickActionsSection } from "./quick-actions-section";
 import { PluginPanelSection } from "../../plugins";
 import { PullRequestList } from "./pull-request-list";
@@ -1203,6 +1205,10 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   const [parentIssueOpen, setParentIssueOpen] = useState(true);
   const [pullRequestsOpen, setPullRequestsOpen] = useState(true);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [inspectedRunId, setInspectedRunId] = useState<string | null>(null);
+  useEffect(() => {
+    setInspectedRunId(null);
+  }, [id]);
   const githubSettings = useGitHubSettings();
 
   // Per-issue, per-session set of optional properties currently visible in
@@ -1447,6 +1453,13 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   } = useIssueTimeline(id, user?.id);
 
   const { data: commentTasks } = useQuery(issueTasksOptions(id));
+  const inspectedTask = commentTasks?.find((task) => task.id === inspectedRunId) ?? null;
+  const handleInspectRun = useCallback((task: AgentTask | null) => {
+    setInspectedRunId(task?.id ?? null);
+    if (!task) return;
+    if (isMobile) setMobileSidebarOpen(true);
+    else if (!desktopSidebarOpen) beginDesktopSidebarToggle(true);
+  }, [isMobile, desktopSidebarOpen, beginDesktopSidebarToggle]);
   const enteringRunIds = useNewRunIds(id, commentTasks);
   const previousCommentRuns = useRef(new Map<string, CommentRun[]>());
   const { runs: commentRuns, timeline: displayTimeline, standaloneRuns } = useMemo(() => {
@@ -3361,6 +3374,13 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
 
             <LocalDirectoryHint projectId={issue?.project_id} />
 
+            {/* The delegation chain, at the top of the activity column. Inline
+                and expanded rather than behind a toggle: it is the one view
+                that shows the whole multi-agent run as a shape, and a diagram
+                nobody opens is a diagram nobody sees. Self-hides when this
+                issue has not delegated anything. */}
+            <RunChainSection issueId={id} issueStatus={issue?.status} selectedId={inspectedRunId} onInspect={handleInspectRun} />
+
             {/* The "agent is working" live signal now lives in the header
                 (IssueAgentHeaderChip) so it stays in one fixed place and
                 doesn't compete with sticky banners in this content column.
@@ -3503,7 +3523,11 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
         {detailContent}
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
           <SheetContent side="right" showCloseButton={false} className="w-[320px] overflow-y-auto p-4">
-            {sidebarContent}
+            {inspectedTask ? (
+              <RunInspector task={inspectedTask} onBack={() => setInspectedRunId(null)} />
+            ) : (
+              sidebarContent
+            )}
           </SheetContent>
         </Sheet>
       </div>
@@ -3529,7 +3553,11 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
         onResize={handleDesktopSidebarResize}
       >
         <AnimatedRightSidebar open={desktopSidebarVisualOpen} motionEnabled={desktopSidebarMotionEnabled}>
-          {sidebarContent}
+          {inspectedTask ? (
+            <RunInspector task={inspectedTask} onBack={() => setInspectedRunId(null)} />
+          ) : (
+            sidebarContent
+          )}
         </AnimatedRightSidebar>
       </ResizablePanel>
     </ResizablePanelGroup>

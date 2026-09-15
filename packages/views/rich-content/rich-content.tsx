@@ -40,7 +40,7 @@ import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import { cn } from "@multica/ui/lib/utils";
-import { useWorkspaceSlug } from "@multica/core/paths";
+import { paths, useWorkspaceSlug } from "@multica/core/paths";
 import { useConfigStore } from "@multica/core/config";
 import type { Attachment } from "@multica/core/types";
 import {
@@ -50,6 +50,7 @@ import {
   markdownUrlTransform,
 } from "@multica/ui/markdown";
 import {
+  AppLink,
   resolveClickIntent,
   useAppOrigin,
   useOptionalNavigation,
@@ -217,7 +218,7 @@ function RichLink({ href, children }: { href?: string; children?: ReactNode }) {
   }
 
   if (isMentionHref(href)) {
-    const match = href.match(/^mention:\/\/(member|agent|issue|project|all)\/(.+)$/);
+    const match = href.match(/^mention:\/\/(member|agent|issue|project|squad|all)\/(.+)$/);
     if (match?.[1] === "issue" && match[2]) {
       // A bare identifier (from the autolink preprocessor) is carried as the id
       // segment; a real mention carries a UUID. Dispatch on the id shape.
@@ -234,7 +235,23 @@ function RichLink({ href, children }: { href?: string; children?: ReactNode }) {
     if (match?.[1] === "project" && match[2]) {
       return <ProjectMentionLink projectId={match[2]} label={childrenToLabel(children)} />;
     }
-    // Member / agent / all mentions
+    const mentionHref =
+      slug && match?.[1] === "agent" && match[2]
+        ? paths.workspace(slug).agentDetail(match[2])
+        : slug && match?.[1] === "member" && match[2]
+          ? paths.workspace(slug).memberDetail(match[2])
+          : slug && match?.[1] === "squad" && match[2]
+            ? paths.workspace(slug).squadDetail(match[2])
+            : null;
+    if (mentionHref) {
+      return (
+        <span className="inline align-middle" onClick={(e) => e.stopPropagation()}>
+          <AppLink href={mentionHref} className="mention">
+            {children}
+          </AppLink>
+        </span>
+      );
+    }
     return <span className="mention">{children}</span>;
   }
 
