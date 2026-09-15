@@ -108,16 +108,12 @@ friends. Multica drives them; it doesn't ship them.
 <br/>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash -s -- --with-server
-multica setup self-host
+git clone https://github.com/y0un922/multica.git
+cd multica
+make selfhost-build
 ```
 
-On Windows, set `$env:MULTICA_MODE="with-server"`, then run the PowerShell installer:
-`irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex`.
-
-This pulls the official images from GHCR and requires Docker. See the
-[Self-Hosting Guide](SELF_HOSTING.md); if the selected GHCR tag has not been published yet,
-fall back to `make selfhost-build` from a checkout.
+Requires Docker. Builds the API and web images from this checkout and starts PostgreSQL. See the [Self-Hosting Guide](SELF_HOSTING.md).
 
 </details>
 

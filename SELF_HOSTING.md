@@ -1,6 +1,6 @@
 # Self-Hosting Guide
 
-Deploy Multica on your own infrastructure in minutes.
+Deploy this checkout with Docker Compose. PostgreSQL, the API, and the web UI run in containers. Agent CLIs still run on the host via the `multica` daemon.
 
 ## Architecture
 
@@ -12,77 +12,41 @@ Deploy Multica on your own infrastructure in minutes.
 
 Each user who runs AI agents locally also installs the **`multica` CLI** and runs the **agent daemon** on their own machine.
 
-## Quick Install (Recommended)
+## Deploy with Docker
 
-Two commands to set up everything — server, CLI, and configuration.
-
-<details open>
-<summary><b>macOS / Linux</b></summary>
-
-<br/>
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) with Compose. Make is optional (see without Make below).
 
 ```bash
-# 1. Install CLI + provision the self-host server
-curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash -s -- --with-server
-
-# 2. Configure CLI, authenticate, and start the daemon
-multica setup self-host
-```
-</details>
-<details>
-<summary><b>Windows (PowerShell)</b></summary>
-
-<br/>
-
-```powershell
-# 1. Install CLI + provision the self-host server
-$env:MULTICA_MODE="with-server"; irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex
-
-# 2. Configure CLI, authenticate, and start the daemon
-multica setup self-host
-```
-</details>
-
-This installs the `multica` CLI, checks out the latest self-host assets, pulls the official Multica images from GHCR, and configures everything for localhost.
-
-Open http://localhost:3000. To log in, configure `RESEND_API_KEY` in `.env` for email-based codes (recommended), or leave Resend unset and copy the generated code from the backend logs. See [Step 2 — Log In](#step-2--log-in) for details.
-
-> **Prerequisites:** Docker and Docker Compose must be installed. The script checks for this and provides install links if missing.
->
-> **CLI only?** If the self-host server is already running and you only need the CLI on a macOS/Linux machine, install it with Homebrew:
->
-> ```bash
-> brew install multica-ai/tap/multica
-> ```
-
----
-
-## Step-by-Step Setup (Alternative)
-
-If you prefer to run each step manually:
-
-### Step 1 — Start the Server
-
-**Prerequisites:** Docker and Docker Compose.
-
-```bash
-git clone https://github.com/multica-ai/multica.git
+git clone https://github.com/y0un922/multica.git
 cd multica
-make selfhost
+make selfhost-build
 ```
 
-`make selfhost` automatically creates `.env` from the example, generates a random `JWT_SECRET`, and starts all services via Docker Compose.
-
-By default it pulls the latest stable release images from GHCR. To build the backend/web from your current checkout instead, run `make selfhost-build`.
-If the selected GHCR tag has not been published yet, `make selfhost` now tells you to fall back to `make selfhost-build`.
-`make selfhost-build` uses local `multica-backend:dev` / `multica-web:dev` tags, so it does not overwrite the pulled `:latest` images.
-
-Once ready:
+`make selfhost-build` creates `.env` if missing (JWT secret, database password), builds the backend and frontend images **from this repo**, and starts PostgreSQL + API + web.
 
 - **Frontend:** http://localhost:3000
 - **Backend API:** http://localhost:8080
 
-> **Note:** If you prefer to run the Docker Compose steps manually, see [Manual Docker Compose Setup](#manual-docker-compose-setup) below.
+After `git pull`, run `make selfhost-build` again so the containers pick up the new code.
+
+```bash
+make selfhost-stop          # stop, keep data
+```
+
+Without Make:
+
+```bash
+cp .env.example .env
+# Set JWT_SECRET — required. Example:
+#   JWT_SECRET=$(openssl rand -hex 32)
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
+```
+
+Ports bind to `127.0.0.1` only. Put a reverse proxy in front for other machines. See [Advanced Configuration](SELF_HOSTING_ADVANCED.md).
+
+> **CLI on the host:** `brew install multica-ai/tap/multica`, then [Step 3](#step-3--install-cli--start-daemon).
+
+---
 
 ### Step 2 — Log In
 
@@ -459,8 +423,7 @@ This reconfigures the CLI for multica.ai, re-authenticates, and restarts the dae
 ## Upgrading
 
 ```bash
-docker compose -f docker-compose.selfhost.yml pull
-docker compose -f docker-compose.selfhost.yml up -d
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
 ```
 
 Pin `MULTICA_IMAGE_TAG` in `.env` to an exact version like `v0.2.4` if you want to stay on a specific release. Migrations run automatically on backend startup.
@@ -475,7 +438,7 @@ If the selected GHCR tag has not been published yet, fall back to `make selfhost
 If you prefer running Docker Compose steps manually instead of `make selfhost`:
 
 ```bash
-git clone https://github.com/multica-ai/multica.git
+git clone https://github.com/y0un922/multica.git
 cd multica
 cp .env.example .env
 ```
@@ -491,8 +454,7 @@ JWT_SECRET=$(openssl rand -hex 32)
 Then start everything:
 
 ```bash
-docker compose -f docker-compose.selfhost.yml pull
-docker compose -f docker-compose.selfhost.yml up -d
+docker compose -f docker-compose.selfhost.yml -f docker-compose.selfhost.build.yml up -d --build
 ```
 
 ## Manual CLI Configuration
