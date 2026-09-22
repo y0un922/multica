@@ -1,0 +1,77 @@
+{
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "workflow_id": {
+      "title": "Workflow Id",
+      "type": "string"
+    },
+    "workflow_version": {
+      "title": "Workflow Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "running",
+        "waiting_approval",
+        "completed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "state": {
+      "additionalProperties": true,
+      "title": "State",
+      "type": "object"
+    },
+    "approval": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approval"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "workflow_id",
+    "workflow_version",
+    "status",
+    "state"
+  ],
+  "title": "RunSnapshot",
+  "type": "object"
+}

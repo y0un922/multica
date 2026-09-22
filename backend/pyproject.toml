@@ -1,0 +1,13 @@
+[project]
+name = "multica"
+version = "0.1.0"
+description = "Versioned workflow protocol and LangGraph compiler for TBM Workbench"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7,<3",
+    "jsonschema>=4.23,<5",
+    "langchain-core>=1.6.4",
+    "langgraph>=1.2.12",
+    "aiohttp>=3.12,<4",
+]

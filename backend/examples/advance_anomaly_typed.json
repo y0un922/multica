@@ -1,0 +1,276 @@
+{
+  "spec_version": "1.1",
+  "id": "advance_anomaly",
+  "version": "2",
+  "name": "推进异常处置",
+  "entrypoint": "read_status",
+  "required_inputs": [],
+  "nodes": [
+    {
+      "id": "read_status",
+      "kind": "capability",
+      "name": "读取设备状态",
+      "ui_stage_id": "inspection",
+      "capability": "telemetry.read",
+      "inputs": {
+        "equipment_id": {
+          "type": "ref",
+          "path": "$.inputs.equipment_id"
+        }
+      },
+      "outputs": {
+        "torque": "$.data.torque"
+      }
+    },
+    {
+      "id": "judge",
+      "kind": "decision",
+      "name": "判断异常",
+      "predicate": {
+        "left": {
+          "type": "ref",
+          "path": "$.data.torque"
+        },
+        "op": "gt",
+        "right": {
+          "type": "literal",
+          "value": 4.0
+        }
+      }
+    },
+    {
+      "id": "diagnose",
+      "kind": "agent_task",
+      "name": "生成方案",
+      "goal": "参考历史数据，生成模拟参数调整方案",
+      "capabilities": [
+        "history.query"
+      ],
+      "inputs": {
+        "torque": {
+          "type": "ref",
+          "path": "$.data.torque"
+        }
+      },
+      "outputs": {
+        "changes": "$.data.changes"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "torque": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "torque"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "object",
+            "properties": {
+              "torque": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "torque"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "approve",
+      "kind": "approval",
+      "name": "人工确认",
+      "prompt": "是否批准此模拟调整方案？",
+      "inputs": {
+        "changes": {
+          "type": "ref",
+          "path": "$.data.changes"
+        }
+      }
+    },
+    {
+      "id": "apply",
+      "kind": "capability",
+      "name": "执行调整",
+      "capability": "control.apply",
+      "inputs": {
+        "changes": {
+          "type": "ref",
+          "path": "$.data.changes"
+        }
+      },
+      "outputs": {
+        "applied": "$.data.applied"
+      }
+    },
+    {
+      "id": "verify",
+      "kind": "capability",
+      "name": "重新读取参数",
+      "capability": "telemetry.read",
+      "outputs": {
+        "torque": "$.data.after_torque"
+      }
+    },
+    {
+      "id": "check_effect",
+      "kind": "decision",
+      "name": "检查处置效果",
+      "predicate": {
+        "left": {
+          "type": "ref",
+          "path": "$.data.after_torque"
+        },
+        "op": "lt",
+        "right": {
+          "type": "ref",
+          "path": "$.data.torque"
+        }
+      }
+    },
+    {
+      "id": "close_task",
+      "kind": "capability",
+      "name": "记录闭环",
+      "capability": "task.record",
+      "inputs": {
+        "status": {
+          "type": "literal",
+          "value": "closed"
+        }
+      },
+      "outputs": {
+        "status": "$.data.task_status"
+      }
+    },
+    {
+      "id": "escalate",
+      "kind": "capability",
+      "name": "记录待人工处理",
+      "capability": "task.record",
+      "inputs": {
+        "status": {
+          "type": "literal",
+          "value": "needs_attention"
+        }
+      },
+      "outputs": {
+        "status": "$.data.task_status"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "read_status",
+      "target": "judge"
+    },
+    {
+      "source": "judge",
+      "target": "diagnose",
+      "when": true
+    },
+    {
+      "source": "judge",
+      "target": "$end",
+      "when": false
+    },
+    {
+      "source": "diagnose",
+      "target": "approve"
+    },
+    {
+      "source": "approve",
+      "target": "apply",
+      "when": true
+    },
+    {
+      "source": "approve",
+      "target": "escalate",
+      "when": false
+    },
+    {
+      "source": "apply",
+      "target": "verify"
+    },
+    {
+      "source": "verify",
+      "target": "check_effect"
+    },
+    {
+      "source": "check_effect",
+      "target": "close_task",
+      "when": true
+    },
+    {
+      "source": "check_effect",
+      "target": "escalate",
+      "when": false
+    },
+    {
+      "source": "close_task",
+      "target": "$end"
+    },
+    {
+      "source": "escalate",
+      "target": "$end"
+    }
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "equipment_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "equipment_id"
+    ],
+    "additionalProperties": false
+  },
+  "state_schema": {
+    "type": "object",
+    "properties": {
+      "torque": {
+        "type": "number"
+      },
+      "changes": {
+        "type": "object",
+        "properties": {
+          "torque": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "torque"
+        ],
+        "additionalProperties": false
+      },
+      "applied": {
+        "type": "boolean"
+      },
+      "after_torque": {
+        "type": "number"
+      },
+      "task_status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "torque"
+    ],
+    "additionalProperties": false
+  }
+}

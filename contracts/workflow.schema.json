@@ -1,0 +1,652 @@
+{
+  "$defs": {
+    "AgentNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ui_stage_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui Stage Id"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "discriminator": {
+              "mapping": {
+                "literal": "#/$defs/Constant",
+                "ref": "#/$defs/Reference"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Reference"
+              },
+              {
+                "$ref": "#/$defs/Constant"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "pattern": "^\\$\\.data(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "kind": {
+          "const": "agent_task",
+          "default": "agent_task",
+          "title": "Kind",
+          "type": "string"
+        },
+        "goal": {
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "goal"
+      ],
+      "title": "AgentNode",
+      "type": "object"
+    },
+    "ApprovalNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ui_stage_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui Stage Id"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "discriminator": {
+              "mapping": {
+                "literal": "#/$defs/Constant",
+                "ref": "#/$defs/Reference"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Reference"
+              },
+              {
+                "$ref": "#/$defs/Constant"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "pattern": "^\\$\\.data(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "kind": {
+          "const": "approval",
+          "default": "approval",
+          "title": "Kind",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "prompt"
+      ],
+      "title": "ApprovalNode",
+      "type": "object"
+    },
+    "CapabilityNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ui_stage_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui Stage Id"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "discriminator": {
+              "mapping": {
+                "literal": "#/$defs/Constant",
+                "ref": "#/$defs/Reference"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Reference"
+              },
+              {
+                "$ref": "#/$defs/Constant"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "pattern": "^\\$\\.data(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "kind": {
+          "const": "capability",
+          "default": "capability",
+          "title": "Kind",
+          "type": "string"
+        },
+        "capability": {
+          "minLength": 1,
+          "title": "Capability",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "capability"
+      ],
+      "title": "CapabilityNode",
+      "type": "object"
+    },
+    "Constant": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "literal",
+          "default": "literal",
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "Constant",
+      "type": "object"
+    },
+    "DataSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "null"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/DataSchema"
+          },
+          "title": "Properties"
+        },
+        "required": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array"
+        },
+        "additionalProperties": {
+          "default": true,
+          "title": "Additionalproperties",
+          "type": "boolean"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enum": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enum"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "DataSchema",
+      "type": "object"
+    },
+    "DecisionNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "ui_stage_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui Stage Id"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "discriminator": {
+              "mapping": {
+                "literal": "#/$defs/Constant",
+                "ref": "#/$defs/Reference"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Reference"
+              },
+              {
+                "$ref": "#/$defs/Constant"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "pattern": "^\\$\\.data(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "kind": {
+          "const": "decision",
+          "default": "decision",
+          "title": "Kind",
+          "type": "string"
+        },
+        "predicate": {
+          "$ref": "#/$defs/Predicate"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "predicate"
+      ],
+      "title": "DecisionNode",
+      "type": "object"
+    },
+    "EdgeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "const": "$end",
+              "type": "string"
+            }
+          ],
+          "title": "Target"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "When"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "EdgeSpec",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "Predicate": {
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "discriminator": {
+            "mapping": {
+              "literal": "#/$defs/Constant",
+              "ref": "#/$defs/Reference"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Reference"
+            },
+            {
+              "$ref": "#/$defs/Constant"
+            }
+          ],
+          "title": "Left"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "gt",
+            "ge",
+            "lt",
+            "le"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "right": {
+          "discriminator": {
+            "mapping": {
+              "literal": "#/$defs/Constant",
+              "ref": "#/$defs/Reference"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Reference"
+            },
+            {
+              "$ref": "#/$defs/Constant"
+            }
+          ],
+          "title": "Right"
+        }
+      },
+      "required": [
+        "left",
+        "op",
+        "right"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "ref",
+          "default": "ref",
+          "title": "Type",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^\\$\\.(inputs|data|system)(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "Reference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "default": "1.0",
+      "enum": [
+        "1.0",
+        "1.1"
+      ],
+      "title": "Spec Version",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "version": {
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "entrypoint": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+      "title": "Entrypoint",
+      "type": "string"
+    },
+    "required_inputs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Inputs",
+      "type": "array"
+    },
+    "input_schema": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DataSchema"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "state_schema": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DataSchema"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "nodes": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "agent_task": "#/$defs/AgentNode",
+            "approval": "#/$defs/ApprovalNode",
+            "capability": "#/$defs/CapabilityNode",
+            "decision": "#/$defs/DecisionNode"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/CapabilityNode"
+          },
+          {
+            "$ref": "#/$defs/AgentNode"
+          },
+          {
+            "$ref": "#/$defs/DecisionNode"
+          },
+          {
+            "$ref": "#/$defs/ApprovalNode"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Nodes",
+      "type": "array"
+    },
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/EdgeSpec"
+      },
+      "title": "Edges",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "name",
+    "entrypoint",
+    "nodes",
+    "edges"
+  ],
+  "title": "WorkflowSpec",
+  "type": "object"
+}
