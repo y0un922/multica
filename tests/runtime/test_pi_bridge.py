@@ -133,7 +133,7 @@ class BridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             def get(self, name):
                 return CapabilityInfo(id=name, output_schema=schema)
         runtime = type("Runtime", (), {})()
-        runtime.invoke = AsyncMock(return_value=ToolResult(status="ok", value={"diagnosis": "abnormal"}))
+        runtime.invoke = AsyncMock(return_value=ToolResult(status="ok", data={"diagnosis": "abnormal"}))
         # The real compiler supplies schema metadata to the optional richer port.
         script = FAKE_PI.replace("json.loads(sys.stdin.readline())", "json.loads(sys.stdin.readline())\nassert json.loads(os.environ['TBM_OUTPUT_SCHEMA'])['required'] == ['diagnosis']")
         agent = PiAgentExecutor([sys.executable, "-u", "-c", script], shutdown_timeout=0.1)
@@ -144,9 +144,14 @@ class BridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         state = await graph.ainvoke(initial_state(spec, {}))
         self.assertEqual(state["data"]["diagnosis"], "abnormal")
         self.assertEqual(state["system"]["status"], "completed")
-        self.assertEqual(sum(e["type"] == "tool_started" for e in events), 1)
-        self.assertEqual(sum(e["type"] == "tool_finished" for e in events), 1)
-        runtime.invoke.assert_awaited_once_with("history.query", {"ring": 10})
+        self.assertEqual(sum(e["type"] == "tool_started" for e in events), 0)
+        self.assertEqual(sum(e["type"] == "tool_finished" for e in events), 0)
+        runtime.invoke.assert_awaited_once()
+        call = runtime.invoke.await_args.kwargs
+        self.assertEqual(call["tool_name"], "history.query")
+        self.assertEqual(call["arguments"], {"ring": 10})
+        self.assertEqual(call["context"].node_id, "diagnose")
+        self.assertEqual(call["context"].run_id, state["system"]["run_id"])
 
     async def test_text_without_submission_is_not_success(self):
         script = '''import sys,json

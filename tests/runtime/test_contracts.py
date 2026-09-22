@@ -1,14 +1,19 @@
 import json
 import unittest
-from dataclasses import asdict
+from pydantic import TypeAdapter
+from runtime.execution import RunSnapshot
+
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 from examples.demo import FakeAgent, FakeRegistry, FakeRuntime, load_typed_spec
 from runtime.execution import WorkflowRunner
 from scripts.export_contracts import CONTRACTS_DIR, schemas
 
+
+def snapshot_dict(snapshot):
+    return TypeAdapter(RunSnapshot).dump_python(snapshot, mode="json")
 
 class ContractTests(unittest.IsolatedAsyncioTestCase):
     def test_exports_match_code(self):
@@ -29,14 +34,19 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
         validator = Draft202012Validator(schemas()["run_snapshot.schema.json"])
         runner = WorkflowRunner(registry=FakeRegistry(), runtime=FakeRuntime(), agent=FakeAgent())
         pending = runner.create_run(load_typed_spec(), {"equipment_id": "TBM"})
-        validator.validate(asdict(pending))
+        validator.validate(snapshot_dict(pending))
         waiting = await runner.execute_run(pending.run_id)
-        validator.validate(asdict(waiting))
-        final = await runner.resume_run(waiting.run_id, approval_id=waiting.approval["id"], approved=True)
-        validator.validate(asdict(final))
+        validator.validate(snapshot_dict(waiting))
+        final = await runner.resume_run(waiting.run_id, confirmation_id=waiting.confirmation.id, decision="accepted")
+        validator.validate(snapshot_dict(final))
         # Exercise contract literals independently of asynchronous scheduling.
-        for status in ("pending", "running", "waiting_approval", "completed", "failed"):
-            sample = asdict(final)
+        for status in ("running", "waiting_confirmation", "completed", "failed"):
+            sample = snapshot_dict(final)
             sample["status"] = status
             sample["state"]["system"]["status"] = status
             validator.validate(sample)
+        for obsolete in ("pending", "waiting_approval", "paused"):
+            sample = snapshot_dict(final)
+            sample["status"] = obsolete
+            with self.subTest(obsolete=obsolete), self.assertRaises(ValidationError):
+                validator.validate(sample)

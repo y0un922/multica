@@ -1,0 +1,56 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 1,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "type": {
+      "enum": [
+        "run.started",
+        "node.started",
+        "node.completed",
+        "agent.thinking",
+        "confirmation.requested",
+        "run.completed",
+        "run.failed",
+        "tool.started",
+        "tool.completed",
+        "tool.failed",
+        "task.created",
+        "task.updated",
+        "confirmation.resolved"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "timestamp": {
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "run_id",
+    "sequence",
+    "type",
+    "timestamp",
+    "payload"
+  ],
+  "title": "AgentEvent",
+  "type": "object"
+}

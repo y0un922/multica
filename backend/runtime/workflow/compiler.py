@@ -14,6 +14,7 @@ from .spec import (AgentNode, ApprovalNode, CapabilityNode, Constant, DecisionNo
                    WorkflowSpec)
 from .validator import validate_workflow
 from .schema import validate_value
+from .tool_contracts import ToolContext, require_ok
 
 
 class RunState(TypedDict):
@@ -32,7 +33,7 @@ def initial_state(spec: WorkflowSpec, inputs: dict[str, Any], run_id: str | None
     validate_value(inputs, spec.input_schema, "inputs")
     return RunState(
         system={"run_id": run_id or str(uuid4()), "workflow_id": spec.id,
-                "workflow_version": spec.version, "status": "pending", "current_node": None},
+                "workflow_version": spec.version, "status": "running", "current_node": None},
         inputs=deepcopy(inputs), data={}, artifacts={}, tasks={}, route=False,
     )
 
@@ -125,22 +126,30 @@ def compile_workflow(
                     async def invoke(capability_id: str, arguments: dict[str, Any]):
                         if isinstance(node, AgentNode) and capability_id not in node.capabilities:
                             raise PermissionError(f"capability not allowed: {capability_id}")
-                        await emit(state, "tool_started", node, capability=capability_id)
-                        try:
-                            info = contracts[capability_id]
-                            validate_value(arguments, info.input_schema, f"{node.id}.{capability_id}.inputs")
-                            result = (await runtime.invoke(capability_id, arguments)).require_ok()
-                            validate_value(result, info.output_schema, f"{node.id}.{capability_id}.outputs")
-                        except Exception as exc:
-                            await emit(state, "tool_failed", node, capability=capability_id, error=str(exc))
-                            raise
-                        await emit(state, "tool_finished", node, capability=capability_id)
+                        info = contracts[capability_id]
+                        validate_value(arguments, info.input_schema, f"{node.id}.{capability_id}.inputs")
+                        system_context = state["system"]
+                        tool_result = await runtime.invoke(
+                            tool_name=capability_id,
+                            arguments=arguments,
+                            context=ToolContext(
+                                run_id=system_context["run_id"], node_id=node.id,
+                                project_id=system_context.get("project_id"),
+                                user_id=system_context.get("user_id"),
+                                trace_id=system_context.get("trace_id") or system_context["run_id"],
+                            ),
+                        )
+                        # Fail closed by default. Workflow retry policy belongs to A;
+                        # never blindly replay an action after an ambiguous timeout.
+                        result = require_ok(tool_result, tool_name=capability_id, node_id=node.id)
+                        validate_value(result, info.output_schema, f"{node.id}.{capability_id}.outputs")
                         return result
 
                     route = False
                     if isinstance(node, CapabilityNode):
                         result = await invoke(node.capability, args)
                     elif isinstance(node, AgentNode):
+                        await emit(state, "agent_thinking", node, summary="Executing agent task", goal=node.goal)
                         validate_value(args, node.input_schema, f"{node.id}.inputs")
                         agent_args = dict(goal=node.goal, context=args,
                                           capabilities=list(node.capabilities), invoke=invoke)

@@ -1,8 +1,10 @@
 """Ports implemented by Capability & Platform and Agent Runtime owners."""
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Literal, Protocol, runtime_checkable
+from typing import Any, Awaitable, Callable, Protocol, runtime_checkable
 
 from .schema import DataSchema, object_schema
+from .tool_contracts import (ToolContext, ToolError, ToolResult, ToolStatus,
+                             ErrorCategory, ToolRuntime, require_ok)
 
 
 @dataclass(frozen=True)
@@ -22,26 +24,12 @@ class CapabilityInfo:
                 object.__setattr__(self, name, schema)
 
 
-@dataclass(frozen=True)
-class ToolResult:
-    status: Literal["ok", "retryable_error", "fatal_error"]
-    value: dict[str, Any] | None = None
-    error: str | None = None
-
-    def require_ok(self) -> dict[str, Any]:
-        if self.status != "ok":
-            raise RuntimeError(f"{self.status}: {self.error or 'tool failed'}")
-        if self.value is None:
-            raise RuntimeError("successful tool must return a dictionary")
-        return self.value
-
-
 class CapabilityRegistry(Protocol):
     def get(self, capability_id: str) -> CapabilityInfo | None: ...
 
 
-class CapabilityRuntime(Protocol):
-    async def invoke(self, capability_id: str, args: dict[str, Any]) -> ToolResult: ...
+# Internal compatibility name; the public invocation contract is ToolRuntime.
+CapabilityRuntime = ToolRuntime
 
 
 class AgentExecutor(Protocol):

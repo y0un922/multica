@@ -2,7 +2,7 @@
 
 Backend A 的第一阶段实现：JSON 工作流协议 → 静态校验 → 原生 LangGraph。
 现已补充数据 Schema 校验与统一 Runner。使用说明：[Schema 协议](runtime/workflow/SCHEMA.md)、[Runner 接口](runtime/execution/README.md)。
-不包含 REST/SSE、真实设备工具、文件解析或真实 LLM；这些通过接口接入。
+已按 `BACKEND_AB_INTERFACE.MD` v0.1 迁移工具边界、Confirmation 和公共事件。REST/SSE、真实工具、持久平台实现通过接口接入；当前联合示例使用假 Backend B。
 
 ## 快速运行
 
@@ -11,13 +11,15 @@ Backend A 的第一阶段实现：JSON 工作流协议 → 静态校验 → 原�
 ```bash
 uv sync
 uv run python main.py
-uv run python -m examples.runner_demo
+uv run python -m examples.ab_demo
 uv run python -m unittest discover -s ../tests/runtime -v
 ```
 
-示例使用确定性的 FakeAgent、FakeRuntime 和内存 checkpoint。`main.py` 为演示自动提交批准，实际产品应由经过身份验证的审批 API 提交，不能自动批准。
+主入口使用真实 A Runner/Compiler、假 B ToolRuntime/Catalog、共享内存 EventBus 与 checkpoint。`main.py` 为演示模拟用户接受确认；正式系统必须由经过鉴权的 B Confirmation API 接收决定。
 
-示例路径：读取扭矩 4.12 → 判断异常 → Agent 查询历史、生成方案 → interrupt 暂停 → 批准 → 调整到 3.5 → 再读参数 → 比较前后效果 → 记录 closed。拒绝审批或效果未改善记录 needs_attention。正常读数直接结束。
+主路径：query_tbm_status → query_sensor_history → detect_parameter_anomaly → query_geological_data → diagnose_fault → estimate_risk → A 判断需要确认 → waiting_confirmation → 用户 accepted → A Resume → create_task → run.completed。正常场景跳过诊断与任务创建；rejected 不创建任务。
+
+新示例 `examples/ab_demo.py` 的完整 Tool Schema 是明确标注的 fixture，尚需替换为 B 的真实 Catalog。旧 examples/demo.py 与 advance_anomaly*.json 保留为编译器回归用例，不代表当前共同验收路径。
 
 ## 目录
 
@@ -26,12 +28,15 @@ multica/
   backend/
     runtime/workflow/
       spec.py          Pydantic 工作流协议
-      interfaces.py    Capability/Agent/EventSink 接口
+      interfaces.py    编译器内部 Capability/Agent/EventSink 端口
+      tool_contracts.py A/B ToolContext、ToolResult、ToolError
+      catalog.py       公开 Tool Catalog 适配器
       validator.py     静态分析、安全限制
       compiler.py      LangGraph 编译与执行绑定
     examples/
+      ab_demo.py       当前 A/B Golden Path（假 B）
       advance_anomaly.json
-      demo.py          示例适配器，不是生产业务实现
+      demo.py          旧编译器回归适配器
     main.py            后端演示入口
     pyproject.toml
     uv.lock
@@ -126,19 +131,29 @@ if state.get("__interrupt__"):
 
 每次独立运行使用不同 thread_id，同一次恢复使用原 thread_id。含 approval 的工作流必须提供 checkpointer。InMemorySaver 仅用于 Demo，进程重启后不能恢复；生产需注入持久化 checkpointer。
 
-暂停由 LangGraph `__interrupt__` / StateSnapshot.next 表达，原始审批请求包含节点、阶段和审批上下文。不要仅依据 RunState.system.status 判断等待审批：暂停时节点尚未提交状态更新。异常会向调用方抛出并输出失败事件，checkpoint 保留最后成功状态；本层不会将失败状态持久化为 failed。现有 Runner 已统一投影 waiting_approval/failed，并提供逐节点业务数据快照；使用 Runner 时应查询它的 RunSnapshot，而非直接解析 checkpoint。
+暂停由 LangGraph `__interrupt__` / StateSnapshot.next 表达，原始审批请求包含节点、阶段和审批上下文。不要仅依据 RunState.system.status 判断等待审批：暂停时节点尚未提交状态更新。异常会向调用方抛出并输出失败事件，checkpoint 保留最后成功状态；本层不会将失败状态持久化为 failed。现有 Runner 已统一投影 waiting_confirmation/failed，并提供逐节点业务数据快照；使用 Runner 时应查询它的 RunSnapshot，而非直接解析 checkpoint。
 
 ## 与角色 C 的边界
 
 `interfaces.py` 提供当前最小端口：
 
 - Registry.get(id) → CapabilityInfo 或 None；真实 Registry 可返回包含相应字段的适配对象。
-- Runtime.invoke(id, args) → ToolResult；能力层仍需负责自身校验。编译器也会按本次编译冻结的 CapabilityInfo 输入/输出 Schema 检查调用边界。
-- ToolResult：ok / retryable_error / fatal_error；非 ok 抛异常。本版不自动重试，避免重复写操作。
+- ToolRuntime.invoke(tool_name=..., arguments=..., context=ToolContext(...)) → ToolResult；按 `BACKEND_AB_INTERFACE.MD` v0.1 调用，模型定义位于 `runtime/workflow/tool_contracts.py`。`CapabilityRuntime` 仅保留为内部类型别名，不支持旧的两参数调用。能力层仍需负责自身校验，编译器也会按冻结的 Schema 检查调用边界。
+- ToolResult：`status / data / error / metadata`，错误使用结构化 ToolError。`require_ok(result, tool_name=..., node_id=...)` 在非 ok 时抛出保留 status/category/code 的 ToolInvocationError。本版默认失败，不自动重试，避免重复写操作。
 - AgentExecutor.run(goal, context, capabilities, invoke) → 字典；真实模型、提示词、结构化输出校验和调用预算由 AgentExecutor 实现。声明 Agent output_schema 后，编译器会校验嵌套字段类型及必需字段；v1.1 必须声明该 Schema。
 - EventSink：异步接收原始事件，由角色 C 做 Event Projection 与 SSE。当前 sink 异常会向外传播，生产应接入可靠事件队列/存储适配器。
 
-事件包括 run_started、node_started、tool_started、tool_finished、tool_failed、node_finished、node_failed、run_finished、run_failed。审批请求通过 LangGraph interrupt 暴露，不重复发送可能在恢复时重放的 approval_required 事件。事件没有全局 seq；由持久化/投影层分配。
+A 侧原始事件包括 run_started、node_started、node_finished、node_failed、run_finished、run_failed。工具调用事件及 ToolCall Trace 由 B 的 ToolRuntime 负责，A 不重复发布。审批请求通过 LangGraph interrupt 暴露，不重复发送可能在恢复时重放的 approval_required 事件。事件没有全局 seq；由持久化/投影层分配。
+
+### A/B v0.1 对齐范围与待办
+
+已迁移工具签名与三态模型、公开 Catalog 适配、公共四态 RunStatus、Confirmation、accepted/rejected、公共 AgentEvent、事件所有权，以及重复确认投递防重。
+
+Runner.start_run/create_run 支持 project_id/user_id/trace_id，调用上下文由 A 传递；缺省 trace_id 使用 run_id。内部 approval 节点仍用 bool 路由，不是 B 的接口。
+
+Runner 的 `get_events(..., after_sequence=N)` 返回 A 发布的公共事件；编译器的 EventSink 仍是 A 私有原始事件端口。所有 A/B 发布者通过共享适配器分配 sequence，不能将 Runner 缓存当完整平台 Stream。
+
+正式接入尚需双方确认序号/持久化机制、Confirmation payload 和结果投递、Run 状态存储，并提供真实 Tool Schema。详情见 [待确认请求](../contracts/CONTRACT_CHANGE_REQUEST_AB_v0.1.md)。当前用假 B 测试通过，不等于真实 B E2E 已完成。
 
 ## 校验与安全边界
 

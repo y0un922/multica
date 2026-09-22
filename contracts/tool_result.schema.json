@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "ErrorCategory": {
+      "enum": [
+        "validation_error",
+        "resource_not_found",
+        "timeout",
+        "external_service_error",
+        "permission_denied",
+        "conflict",
+        "business_error",
+        "internal_error"
+      ],
+      "title": "ErrorCategory",
+      "type": "string"
+    },
+    "ToolError": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/ErrorCategory"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        }
+      },
+      "required": [
+        "category",
+        "code",
+        "message",
+        "retryable"
+      ],
+      "title": "ToolError",
+      "type": "object"
+    },
+    "ToolStatus": {
+      "enum": [
+        "ok",
+        "retryable_error",
+        "fatal_error"
+      ],
+      "title": "ToolStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "$ref": "#/$defs/ToolStatus"
+    },
+    "data": {
+      "anyOf": [
+        {},
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Data"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "ToolResult",
+  "type": "object"
+}

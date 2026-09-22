@@ -1,100 +1,110 @@
-# 角色 C 接口交接（当前实现）
+# Backend B / 角色 C 接口交接
 
-**分工：**角色 B 提供工作流协议、编译器和 Runner；角色 C 实现能力层、模拟世界、REST、事件投影与 SSE。AgentExecutor 由角色 B 提供，C 不需要实现 Agent。
+对齐依据：`BACKEND_AB_INTERFACE.MD` v0.1。角色 B 是 Backend A（当前实现），角色 C 是 Backend B（平台）。
 
-## 1. C 需要提供的接口
-
-定义：`backend/runtime/workflow/interfaces.py`。实现同名方法即可，无需继承。
+## 1. Tool Runtime：使用公共协议，不导入实现
 
 ```python
-from runtime.workflow.interfaces import CapabilityInfo, ToolResult
+from runtime.workflow.tool_contracts import ToolContext, ToolResult
 
-# Registry：同步查询；不存在返回 None
-registry.get(capability_id: str) -> CapabilityInfo | None
+async def invoke(tool_name: str, arguments: dict, context: ToolContext) -> ToolResult:
+    ...
 
-# Runtime：异步调用，负责输入/输出校验与真实或模拟执行
-await runtime.invoke(capability_id: str, args: dict) -> ToolResult
+ToolResult(status="ok", data={"task_id": "task-1", "status": "open"})
+ToolResult(status="retryable_error", error={
+    "category": "timeout", "code": "TOOL_TIMEOUT",
+    "message": "Service timed out", "retryable": True,
+})
 ```
 
+B 负责严格 I/O 校验、工具执行、错误分类、tool.* 和 task.* 事件、ToolCall Trace。A 不解析 error.message，不直接调用具体工具/业务服务/Repository。
+
+当前 A 采用 fail 策略，不自动 retry；后续重试/fallback 也只由 A 决定。ToolContext 没有幂等字段，写工具暂不盲重试。
+
+公共模型目前在 A 仓库中镜像；共享包路径/分发需双方确认，不能各自悄悄更改模型。
+
+## 2. Tool Catalog
+
 ```python
-CapabilityInfo(id="control.apply", side_effect=True, requires_approval=True)
-ToolResult(status="ok", value={"applied": True})  # 成功必须返回字典
-ToolResult(status="retryable_error", error="暂时不可用")
-ToolResult(status="fatal_error", error="参数非法")
+from runtime.workflow.catalog import CatalogRegistry
+
+# catalog_json 为 GET /api/tools 的已加载响应；网络/鉴权由装配层负责。
+registry = CatalogRegistry(catalog_json, confirmation_tools={"create_task"})
 ```
 
-- 当前没有自动重试，非 `ok` 会导致运行失败。
-- `requires_approval=True` 的能力必须紧接审批通过分支；Agent 仅能使用只读能力。
-- 当前 invoke **没有 run_id/调用幂等上下文**，真实写操作接入前需双方补齐；不能假定 checkpoint 保证写操作只执行一次。
-- Registry.search/Resolver 暂未实现，不是本轮接入前提。
+CatalogEntry 字段：name/description/category/side_effect/input_schema/output_schema。confirmation_tools 是 A 的策略，不向 B Catalog 虚构 requires_approval 字段。
 
-## 2. C 调用 Runner
+不支持的 Schema 关键词会明确报错，详见 `backend/runtime/workflow/SCHEMA.md`。需要用 B 的真实 Schema 验证兼容性；Demo fixture 不是正式工具定义。
 
-定义：`backend/runtime/execution/runner.py`。**服务生命周期内复用一个 Runner，不能每次请求新建。**
+## 3. Runner
 
 ```python
-from dataclasses import asdict
-from runtime.execution import WorkflowRunner
-from runtime.workflow import WorkflowSpec
+from pydantic import TypeAdapter
+from runtime.execution import RunSnapshot, WorkflowRunner
 
-runner = WorkflowRunner(registry=registry, runtime=runtime, agent=agent_executor)
-spec = WorkflowSpec.model_validate(workflow_json)
-
-run = await runner.start_run(spec, inputs, run_id="唯一运行ID")
-snapshot = runner.get_run(run.run_id)
-events = runner.get_events(run.run_id, after_seq=0)
-
-# 仅在 snapshot.status == "paused" 时，由已授权的人工审批命令触发
-run = await runner.resume_run(
-    run.run_id, approval_id=snapshot.approval["id"], approved=True,
+runner = WorkflowRunner(
+    registry=registry, runtime=tool_runtime,
+    event_publisher=shared_event_publisher, store=run_store,
 )
-response = asdict(run)  # dataclass → API 响应字典
+run = await runner.start_run(spec, inputs, project_id="project", user_id="user")
+response = TypeAdapter(RunSnapshot).dump_python(run, mode="json")
 ```
 
-**start_run/resume_run 会等待本段执行结束、失败或暂停，不是立即返回的后台启动接口。** 若 API 需要立即响应，由 C 管理后台任务及其异常；当前没有任务队列。
+复用一个 Runner；start_run 会等待执行到结束、失败或确认暂停。需要异步调度时：先 `create_run`，再由应用任务调度器调用 `execute_run`。新注册 Run 为 running，首次调度标记不暴露为 pending。
 
-返回 `RunSnapshot`：
+RunStatus：running / waiting_confirmation / completed / failed。
 
-| 字段 | 内容 |
-|---|---|
-| run_id / workflow_id / workflow_version | 运行与版本标识 |
-| status | running / paused / completed / failed |
-| state | system / inputs / data / artifacts / tasks / route（route 为内部字段） |
-| approval | 暂停时包含 id、node_id、ui_stage_id、prompt、context；否则 None |
-| error | 失败时包含 type、message；否则 None |
+RunSnapshot：run_id、workflow_id/version、status、state、confirmation、error、created_at/updated_at。
 
-运行期间 `state.data` 不是逐节点实时快照；以事件展示执行进度。`completed` 只表示图执行结束，不等于业务已闭环；示例看 `state.data.task_status`。
+state.data 是逐节点已提交的数据快照。completed 不是现场异常已消除：新 Demo 的目标是创建 open 任务，而不是设备控制闭环。
 
-建议 HTTP 映射（**路由尚未实现**）：
+## 4. EventBus 与 Confirmation
 
-| 情况 | 建议处理 |
-|---|---|
-| RunNotFoundError | 404 |
-| RunConflictError：重复 ID、过期审批、非暂停状态恢复 | 409 |
-| 协议/校验/输入 ValueError | 422；WorkflowValidationError.issues 可供展示 |
-| 工具/图执行失败 | 返回 status=failed 的 RunSnapshot，不作为接口内部异常 |
+公共 AgentEvent：id/run_id/sequence/type/timestamp/payload。
 
-## 3. 原始事件 → C 投影为 RunEvent / SSE
+A 发布：run.started、node.started、node.completed、agent.thinking、confirmation.requested、run.completed、run.failed。
 
-`get_events(run_id, after_seq=N)` 返回 `seq > N` 的原始事件列表。seq 从 1 开始，**仅在单个 Run 内递增**。
+B 发布：tool.started/completed/failed、task.created/updated、confirmation.resolved。
 
-- 公共字段：`seq / type / run_id / timestamp`。
-- 可选字段：`node_id / ui_stage_id / capability / error`，不能假定每种事件都有。
-- 类型：`run_started / run_finished / run_failed`、`node_started / node_finished / node_failed`、`tool_started / tool_finished / tool_failed`、`approval_required / approval_resolved`。
-- `approval_required` 的审批 ID 字段叫 **id**；`approval_resolved` 中叫 **approval_id**。
-- C 负责业务文案、字段映射、敏感信息过滤、SSE 与事件持久化。当前没有 state_changed/WorldState 推送，需由模拟世界与投影层补齐。
+A 私有适配器 `SequencedEventPublisher` 最终调用公共 `EventBus.publish(AgentEvent)`。B 提供或装配共享序号作用域，使所有生产者使用同一顺序。**不要让 A/B 各自编号。**
 
-## 4. 联调入口与限制
+B 保存 Confirmation 并暴露确认 API；决定处理后发布 confirmation.resolved，**A 的消费者**调用：
+
+```python
+await runner.handle_event(resolved_event)
+```
+
+B 不导入 LangGraph，不操作内部 interrupt ID。当前候选 payload 是完整 Confirmation 模型；详见下方待确认文档。重复相同决定在单进程内幂等，不重复创建任务。
+
+`runner.get_events(run_id, after_sequence=N)` 只查询 A 发布的事件；sequence 可能有间隔。完整 Stream/SSE 应由 B 查询/提供。
+
+## 5. 需要双方确认的部分
+
+请 review [CONTRACT_CHANGE_REQUEST_AB_v0.1.md](CONTRACT_CHANGE_REQUEST_AB_v0.1.md)：
+
+- 序号分配和发布事务；
+- Confirmation payload、保存成功语义和结果投递；
+- Run 状态存储装配；
+- 真实 Tool Catalog Schema；
+- 动作幂等与重启恢复。
+
+这些并未因为 A 有适配器和测试就被视为共同批准。
+
+## 6. 验证入口
 
 ```bash
 cd multica/backend
 uv sync
-uv run python -m examples.runner_demo
+uv run python main.py
 uv run python -m unittest discover -s ../tests/runtime -v
+uv run python -m scripts.export_contracts
 ```
 
-- 示例能力参数/返回值：`backend/examples/demo.py`；流程：`backend/examples/advance_anomaly.json`。
-- 示例能力：telemetry.read、history.query、control.apply、task.record。
-- 工作流结构协议：`contracts/workflow.schema.json`；静态图与能力校验仍由 Runner 编译阶段执行。
-- 当前仅单进程内存运行，无重启恢复、多 worker 协调或持久事件存储；仅换持久化 checkpointer 不足以解决这些问题。
-- 审批身份鉴别、权限与审计由 C 实现；Demo 自动批准不能直接用于正式 API。
+- 新 Demo：`backend/examples/ab_demo.py`；主入口 main.py 已切换到它。
+- 单测：`tests/runtime/test_ab_integration.py`。
+- 旧 examples/demo.py 与 advance_anomaly*.json 保留为编译器回归用例，不是当前 A/B Golden Path。
+- 示例运行真实 A 编译器/Runner，B 是明确标注的测试替身；未完成真实平台联调。
+- 单进程内存模式不支持重启恢复、多 worker、跨存储事务和 exactly-once 外部写入。
+- Demo 自动接受确认只是测试脚本行为，生产必须经过 B 的用户鉴权、授权和审计。
+
+详细行为与迁移参数见 [Runner 说明](../backend/runtime/execution/README.md)。

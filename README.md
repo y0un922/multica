@@ -25,18 +25,20 @@ multica/
 
 ## 接口交接
 
-角色 C 接入请先阅读：[角色C_接口交接.md](角色C_接口交接.md)。
+角色 C 接入请先阅读：[角色C_接口交接.md](contracts/角色C_接口交接.md)。
 
 ## 当前实现
 
-已实现 WorkflowSpec v1.0/v1.1、Schema 静态与运行期校验、LangGraph 编译器，以及 Runner 运行管理层（pending / running / waiting_approval / completed / failed）。详细协议、接入接口与限制参见 [后端说明](backend/README.md) 和 [Schema 协议](backend/runtime/workflow/SCHEMA.md)；启动、查询、审批恢复接口见 [Runner 说明](backend/runtime/execution/README.md)。
+已实现 WorkflowSpec v1.0/v1.1、Schema 校验、LangGraph 编译器及 Runner（running / waiting_confirmation / completed / failed），并迁移 ToolContext/ToolResult、公开 Tool Catalog 适配、Confirmation 暂停/恢复、AgentEvent 与共享序号发布适配器。详细协议、接入接口与限制参见 [后端说明](backend/README.md) 和 [Schema 协议](backend/runtime/workflow/SCHEMA.md)；启动、查询、审批恢复接口见 [Runner 说明](backend/runtime/execution/README.md)。
 
 ```bash
 cd backend
 uv sync
 uv run python main.py
-uv run python -m examples.runner_demo
+uv run python -m examples.ab_demo
 uv run python -m unittest discover -s ../tests/runtime -v
 ```
 
-示例使用 FakeAgent、FakeRuntime 与内存 checkpoint，不依赖真实模型或外部设备。
+当前主示例使用真实 A Runtime + 假 B 平台与内存 checkpoint，覆盖异常 → 诊断 → 风险 → 人工确认 → 创建任务；正常和拒绝路径不创建任务。不依赖真实模型或设备。
+
+尚需 Backend B 确认事件/确认装配约定并提供真实工具 Schema，见 [待确认请求](contracts/CONTRACT_CHANGE_REQUEST_AB_v0.1.md)。假 B 测试通过不代表真实平台联调、持久化恢复或生产鉴权已经完成。

@@ -43,18 +43,19 @@ class FakeRuntime:
         self.torque = torque
         self.calls = []
 
-    async def invoke(self, capability_id, args):
+    async def invoke(self, tool_name, arguments, context):
+        capability_id, args = tool_name, arguments
         self.calls.append((capability_id, args))
         if capability_id == "telemetry.read":
-            return ToolResult("ok", {"torque": self.torque})
+            return ToolResult(status="ok", data={"torque": self.torque})
         if capability_id == "history.query":
-            return ToolResult("ok", {"baseline": 3.5})
+            return ToolResult(status="ok", data={"baseline": 3.5})
         if capability_id == "control.apply":
             self.torque = args["changes"]["torque"]
-            return ToolResult("ok", {"applied": True})
+            return ToolResult(status="ok", data={"applied": True})
         if capability_id == "task.record":
-            return ToolResult("ok", {"status": args["status"]})
-        return ToolResult("fatal_error", error="unknown capability")
+            return ToolResult(status="ok", data={"status": args["status"]})
+        return ToolResult(status="fatal_error", error={"category": "external_service_error", "code": "TEST_ERROR", "message": "unknown capability", "retryable": False})
 
 
 class FakeAgent:

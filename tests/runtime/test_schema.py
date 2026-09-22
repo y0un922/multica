@@ -182,8 +182,8 @@ class RuntimeSchemaTests(unittest.IsolatedAsyncioTestCase):
     async def test_typed_golden_path(self):
         runner = self.runner()
         paused = await runner.start_run(load_typed_spec(), {"equipment_id": "TBM-01"})
-        self.assertEqual(paused.status, "waiting_approval")
-        final = await runner.resume_run(paused.run_id, approval_id=paused.approval["id"], approved=True)
+        self.assertEqual(paused.status, "waiting_confirmation")
+        final = await runner.resume_run(paused.run_id, confirmation_id=paused.confirmation.id, decision="accepted")
         self.assertEqual(final.status, "completed")
         self.assertEqual(final.state["data"]["task_status"], "closed")
 
@@ -201,14 +201,14 @@ class RuntimeSchemaTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_tool_output_validated_before_state_write(self):
         class Bad(FakeRuntime):
-            async def invoke(self, *args):
-                return ToolResult("ok", {"torque": "too high"})
+            async def invoke(self, *args, **kwargs):
+                return ToolResult(status="ok", data={"torque": "too high"})
         runner = self.runner(runtime=Bad())
         failed = await runner.start_run(load_typed_spec(), {"equipment_id": "TBM"})
         self.assertEqual(failed.status, "failed")
         self.assertEqual(failed.error["type"], "SchemaValueError")
         self.assertEqual(failed.state["data"], {})
-        self.assertIn("tool_failed", [e["type"] for e in runner.get_events(failed.run_id)])
+        self.assertIn("run.failed", [e["type"] for e in runner.get_events(failed.run_id)])
 
     async def test_agent_output_validated(self):
         class BadAgent:
@@ -238,7 +238,7 @@ class RuntimeSchemaTests(unittest.IsolatedAsyncioTestCase):
         failed = await runner.start_run(WorkflowSpec.model_validate(raw), {"equipment_id": "TBM"})
         self.assertEqual(failed.status, "failed")
         self.assertEqual(failed.error["type"], "SchemaValueError")
-        self.assertNotIn("run_finished", [e["type"] for e in runner.get_events(failed.run_id)])
+        self.assertNotIn("run.completed", [e["type"] for e in runner.get_events(failed.run_id)])
 
     async def test_direct_graph_input_bypass_still_validated(self):
         # Direct LangGraph usage must not bypass initial_state's validation.

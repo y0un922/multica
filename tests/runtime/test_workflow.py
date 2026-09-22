@@ -134,12 +134,12 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_tool_error(self):
         class BrokenRuntime:
-            async def invoke(self, *args):
-                return ToolResult("retryable_error", error="offline")
+            async def invoke(self, *args, **kwargs):
+                return ToolResult(status="retryable_error", error={"category": "external_service_error", "code": "TEST_ERROR", "message": "offline", "retryable": True})
         self.runtime = BrokenRuntime()
         with self.assertRaisesRegex(RuntimeError, "offline"):
             await self.start(self.compile())
-        self.assertIn("tool_failed", [e["type"] for e in self.events])
+        self.assertIn("node_failed", [e["type"] for e in self.events])
         self.assertNotIn("run_finished", [e["type"] for e in self.events])
 
     async def test_missing_output(self):
