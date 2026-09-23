@@ -44,12 +44,21 @@ class BaseNode(Model):
 
 
 class CapabilityNode(BaseNode):
+    type: Literal["tool"] = "tool"
     kind: Literal["capability"] = "capability"
     capability: str = Field(min_length=1)
 
 
+class PiConfig(Model):
+    provider: str | None = Field(default=None, min_length=1)
+    model: str | None = Field(default=None, min_length=1)
+    timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+
 class AgentNode(BaseNode):
+    type: Literal["pi"] = "pi"
     kind: Literal["agent_task"] = "agent_task"
+    pi: PiConfig = Field(default_factory=PiConfig)
     goal: str = Field(min_length=1)
     capabilities: list[str] = Field(default_factory=list)
     input_schema: DataSchema | None = None
@@ -63,6 +72,7 @@ class AgentNode(BaseNode):
 
 
 class DecisionNode(BaseNode):
+    type: Literal["decision"] = "decision"
     kind: Literal["decision"] = "decision"
     predicate: Predicate
 
@@ -74,6 +84,7 @@ class DecisionNode(BaseNode):
 
 
 class ApprovalNode(BaseNode):
+    type: Literal["approval"] = "approval"
     kind: Literal["approval"] = "approval"
     prompt: str = Field(min_length=1)
 
@@ -92,7 +103,7 @@ class EdgeSpec(Model):
 
 
 class WorkflowSpec(Model):
-    spec_version: Literal["1.0", "1.1"] = "1.0"
+    spec_version: Literal["1.0", "1.1", "1.2"] = "1.0"
     id: Identifier
     version: str = Field(min_length=1)
     name: str
@@ -103,16 +114,40 @@ class WorkflowSpec(Model):
     nodes: list[NodeSpec] = Field(min_length=1)
     edges: list[EdgeSpec]
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_node_types(cls, value):
+        if not isinstance(value, dict) or not isinstance(value.get("nodes"), list):
+            return value
+        mapping = {"pi": "agent_task", "tool": "capability", "decision": "decision", "approval": "approval"}
+        nodes = []
+        for node in value["nodes"]:
+            if not isinstance(node, dict):
+                nodes.append(node)
+                continue
+            node = dict(node)
+            if "type" in node:
+                kind = mapping.get(node["type"]) if isinstance(node["type"], str) else None
+                if kind is None:
+                    raise ValueError(f"{node.get('id')}: unknown node type {node['type']!r}")
+                if "kind" in node and node["kind"] != kind:
+                    raise ValueError(f"{node.get('id')}: type and kind conflict")
+                node["kind"] = kind
+            elif value.get("spec_version") == "1.2":
+                raise ValueError(f"{node.get('id')}: v1.2 requires explicit node type")
+            nodes.append(node)
+        return {**value, "nodes": nodes}
+
     @model_validator(mode="after")
     def schema_contracts(self):
         object_schema(self.input_schema, "input_schema")
         object_schema(self.state_schema, "state_schema")
-        if self.spec_version == "1.1":
+        if self.spec_version in ("1.1", "1.2"):
             if self.input_schema is None or self.state_schema is None:
-                raise ValueError("v1.1 requires input_schema and state_schema")
+                raise ValueError(f"v{self.spec_version} requires input_schema and state_schema")
             for node in self.nodes:
                 if isinstance(node, AgentNode) and (node.input_schema is None or node.output_schema is None):
-                    raise ValueError(f"{node.id}: v1.1 agent requires input_schema and output_schema")
+                    raise ValueError(f"{node.id}: v{self.spec_version} agent requires input_schema and output_schema")
         if self.input_schema is not None:
             missing = set(self.required_inputs) - self.input_schema.properties.keys()
             if missing:

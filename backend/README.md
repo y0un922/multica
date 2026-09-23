@@ -4,6 +4,12 @@ Backend A 的第一阶段实现：JSON 工作流协议 → 静态校验 → 原�
 现已补充数据 Schema 校验与统一 Runner。使用说明：[Schema 协议](runtime/workflow/SCHEMA.md)、[Runner 接口](runtime/execution/README.md)。
 已按 `BACKEND_AB_INTERFACE.MD` v0.1 迁移工具边界、Confirmation 和公共事件。REST/SSE、真实工具、持久平台实现通过接口接入；当前联合示例使用假 Backend B。
 
+## 节点级执行配置（新增 v1.2）
+
+模板可用 `type: pi` 配置独立 Agent，`type: tool` 直接调用能力；`decision/approval` 保留控制流语义。Compiler 和 Runner 支持 `agent_factory(node)`，每个 Pi 节点可配置不同 provider/model/timeout。旧 v1.0/v1.1 kind 模板仍兼容。新的 Demo 不再接受 Run 级 Fake/Pi 覆盖，执行方式取自模板节点。
+
+运行 `uv run python -m demo_workbench.server --enable-pi`，打开 `http://127.0.0.1:8010` 配置各节点。详见 [节点配置、协议和测试](demo_workbench/README.md)。下文的旧示例与边界说明仍适用，Pi 接入细节以 [Agent 说明](runtime/agent/README.md) 为准。
+
 ## 快速运行
 
 需要 Python 3.11+ 和 uv，在 `multica/backend/` 下执行：

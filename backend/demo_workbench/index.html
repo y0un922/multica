@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflow Draft · 本地联调台</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#dbe6f6;background:#0e1626}*{box-sizing:border-box}body{margin:0;padding:24px}h1{font-size:24px;margin:0 0 8px}h2{font-size:16px;margin:0 0 12px}.muted{color:#a0aec0;font-size:13px}header{margin-bottom:20px}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0}button,select{background:#233450;border:1px solid #465c7c;color:#fff;padding:9px 14px;border-radius:6px}button{cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}.primary{background:#176a75}.layout{display:grid;grid-template-columns:minmax(300px,1fr) minmax(400px,1.45fr);gap:16px}.panel{background:#152238;border:1px solid #2c3d58;border-radius:10px;padding:16px;min-width:0}textarea{width:100%;height:500px;resize:vertical;background:#101b2c;color:#dbe6f6;border:1px solid #35455e;padding:12px;font:12px/1.6 monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:330px;overflow:auto}.error{color:#ffb8b8;white-space:pre-wrap}.success{color:#7ee7ba}#graph{width:100%;max-height:600px;background:#101b2c;border-radius:6px}#approval{border:1px solid #eab566;padding:12px;margin-top:12px;border-radius:6px}#activity{max-height:340px;overflow:auto}.event{border-bottom:1px solid #293952;padding:8px 0;font-size:12px}.event summary{cursor:pointer}.badge{padding:4px 9px;background:#233450;border-radius:4px}.legend{font-size:12px;margin-top:8px;color:#a0aec0}.bottom{margin-top:16px}@media(max-width:850px){.layout{grid-template-columns:1fr}body{padding:12px}}
+</style>
+</head>
+<body>
+<header><h1>Workflow Draft → 编译 → 执行</h1><div class="muted">本地测试台 · 模板 + 模拟设备 · 进程退出即清空 · 非正式平台 API</div></header>
+<div class="toolbar">
+<button id="load">重载模板</button><button id="compile" class="primary">校验并编译</button>
+<span id="piState" class="muted"></span>
+<select id="scenario" aria-label="场景"><option value="anomaly">扭矩异常 4.12</option><option value="normal">正常 3.0</option></select>
+<button id="run" class="primary" disabled>运行已编译草稿</button><span id="status" class="badge">未运行</span>
+</div>
+<div id="message" role="status"></div>
+<section class="panel" style="margin-bottom:16px"><h2>节点执行配置</h2><div class="muted">type=pi：独立 Agent；type=tool：直接调用工具。规则与审批保留原生执行。修改后请重新编译。</div><div id="nodeConfig"></div></section>
+<div class="layout">
+<section class="panel"><h2>模板草稿（可编辑 JSON）</h2><div class="muted">编辑后必须重新编译；运行中的流程使用独立快照。</div><textarea id="draft" spellcheck="false" aria-label="Workflow Draft JSON"></textarea></section>
+<section class="panel"><h2 id="graphTitle">工作流预览</h2><svg id="graph" role="img" aria-label="业务流程图"></svg><div class="legend">灰：未执行　蓝：运行中　绿：完成　黄：待确认　红：失败。连线标明条件分支。</div></section>
+</div>
+<div class="layout bottom">
+<section class="panel"><h2>运行快照与通信证据</h2><div id="evidence" class="muted">尚无运行</div>
+<div id="approval" hidden><strong id="prompt"></strong><pre id="proposal"></pre><button id="accept">批准模拟调整</button> <button id="reject">拒绝</button></div>
+<pre id="snapshot"></pre></section>
+<section class="panel"><h2>执行动态（共享 sequence）</h2><div id="activity"></div></section>
+</div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let token='',compiled=null,preview=null,activeGraph=null,runId=null,current=null,sequence=0,history=[],timer=null,busy=false,active=false,polling=false,nodeOptions={};
+const ns='http://www.w3.org/2000/svg';
+function message(text,error=false){$('message').textContent=text;$('message').className=error?'error':'success'}
+async function api(path,body){const response=await fetch('/demo/'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-Demo-Token':token},body:body===undefined?undefined:JSON.stringify(body)});const text=await response.text();let data;try{data=JSON.parse(text)}catch{data={error:text}}if(!response.ok)throw new Error(data.error||response.statusText);return data}
+function controls(){for(const id of ['load','compile','scenario'])$(id).disabled=busy||active;$('draft').disabled=busy||active;for(const input of $('nodeConfig').querySelectorAll('input,select,textarea'))input.disabled=busy||active;$('run').disabled=busy||active||!compiled;for(const id of ['accept','reject'])$(id).disabled=busy}
+function svg(tag,attrs,text){const el=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);if(text!==undefined)el.textContent=text;return el}
+function draw(graph){if(!graph)return;const root=$('graph');root.replaceChildren();$('graphTitle').textContent=graph.name;
+ const levels=Object.fromEntries(graph.nodes.map(n=>[n.id,0]));for(let i=0;i<graph.nodes.length;i++)for(const e of graph.edges)levels[e.target]=Math.max(levels[e.target],levels[e.source]+1);
+ const groups={};for(const n of graph.nodes)(groups[levels[n.id]]??=[]).push(n);
+ const width=Math.max(560,...Object.values(groups).map(g=>g.length*240));const height=(Math.max(...Object.values(levels))+1)*110+30;root.setAttribute('viewBox',`0 0 ${width} ${height}`);
+ const defs=svg('defs',{}),marker=svg('marker',{id:'arrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'});marker.append(svg('path',{d:'M 0 0 L 10 5 L 0 10 z',fill:'#8297b5'}));defs.append(marker);root.append(defs);
+ const pos={};for(const[level,nodes]of Object.entries(groups))nodes.forEach((n,i)=>pos[n.id]={x:width*(i+1)/(nodes.length+1),y:Number(level)*110+18});
+ for(const e of graph.edges){const a=pos[e.source],b=pos[e.target];root.append(svg('path',{d:`M ${a.x} ${a.y+56} L ${b.x} ${b.y-4}`,stroke:'#8297b5',fill:'none','marker-end':'url(#arrow)'}));if(e.when!==null)root.append(svg('text',{x:(a.x+b.x)/2+7,y:(a.y+b.y)/2+26,fill:'#cad5e5','font-size':12},e.when?'是 / 批准':'否 / 拒绝'))}
+ const states={};for(const e of history){const id=e.payload.node_id;if(e.type==='node.started')states[id]='running';if(e.type==='node.completed')states[id]='completed'}
+ if(current){const s=current.snapshot;if(s.confirmation)states[s.confirmation.node_id]='waiting';if(s.status==='failed')states[s.state.system.current_node]='failed';if(s.status==='completed')states['$end']='completed'}
+ const colors={running:'#226ab0',completed:'#17694e',waiting:'#80591d',failed:'#913b48'};
+ for(const n of graph.nodes){const p=pos[n.id];root.append(svg('rect',{x:p.x-102,y:p.y,width:204,height:56,rx:9,fill:colors[states[n.id]]||'#24354f',stroke:'#6a7f9b'}));root.append(svg('text',{x:p.x,y:p.y+23,'text-anchor':'middle',fill:'#fff','font-size':14},n.name));root.append(svg('text',{x:p.x,y:p.y+43,'text-anchor':'middle',fill:'#bfcee1','font-size':10},n.type||n.kind))}}
+function resetRun(){clearTimeout(timer);runId=null;current=null;history=[];sequence=0;activeGraph=null;$('activity').replaceChildren();$('snapshot').textContent='';$('approval').hidden=true;$('evidence').textContent='尚无运行';$('status').textContent='未运行'}
+function invalidate(){compiled=null;message('草稿已修改，必须重新编译。');controls()}
+function renderConfig(){const draft=JSON.parse($('draft').value);const box=$('nodeConfig');box.replaceChildren();
+ for(const node of draft.workflow.nodes){const row=document.createElement('div');row.className='toolbar';const title=document.createElement('strong');title.textContent=node.name+' ('+node.id+')';row.append(title);
+ const type=node.type||({capability:'tool',agent_task:'pi'}[node.kind]||node.kind);const options=nodeOptions[node.id];
+ if(options&&['tool','pi'].includes(type)){const select=document.createElement('select');select.setAttribute('aria-label',node.id+' 执行方式');for(const t of ['tool','pi']){const o=document.createElement('option');o.value=t;o.textContent=t==='pi'?'Pi Agent':'Tool 直接执行';select.append(o)}select.value=type;
+ select.onchange=()=>{const d=JSON.parse($('draft').value);const i=d.workflow.nodes.findIndex(n=>n.id===node.id);const old=d.workflow.nodes[i];options[type]=structuredClone(old);const next=structuredClone(options[select.value]);for(const k of ['id','name','inputs','outputs','ui_stage_id'])if(k in old)next[k]=old[k];delete next.kind;d.workflow.nodes[i]=next;$('draft').value=JSON.stringify(d,null,2);invalidate();renderConfig()};row.append(select);
+ }else{const label=document.createElement('span');label.textContent=type+(type==='tool'?' · 受控动作':'');row.append(label)}
+ if(type==='tool'){const label=document.createElement('span');label.className='muted';label.textContent=node.capability;row.append(label)}
+ if(type==='pi'){for(const [key,label]of [['provider','Provider（默认继承）'],['model','Model（默认继承）'],['timeout','超时秒（默认继承）'],['goal','Agent 目标'],['capabilities','工具白名单（逗号分隔）']]){const input=document.createElement('input');input.placeholder=label;input.title=label;input.setAttribute('aria-label',node.id+' '+label);input.style.cssText='padding:8px;max-width:100%;background:#101b2c;color:#dbe6f6;border:1px solid #465c7c';input.value=key==='goal'?node.goal:key==='capabilities'?(node.capabilities||[]).join(','):(node.pi?.[key]??'');if(key==='timeout'){input.type='number';input.min='0.1';input.step='any'}input.onchange=()=>{const d=JSON.parse($('draft').value),n=d.workflow.nodes.find(n=>n.id===node.id);if(key==='goal')n.goal=input.value;else if(key==='capabilities')n.capabilities=input.value.split(',').map(x=>x.trim()).filter(Boolean);else{n.pi??={};if(!input.value)delete n.pi[key];else n.pi[key]=key==='timeout'?Number(input.value):input.value} $('draft').value=JSON.stringify(d,null,2);invalidate()};row.append(input)}}box.append(row)}controls()}
+async function load(){const data=await api('template');token=data.token;$('draft').value=JSON.stringify(data.draft,null,2);nodeOptions=data.node_options;$('piState').textContent=data.pi_enabled?'Pi 已启用（按节点调用，可能计费）':'Pi 未启用：tool 节点可直接运行';renderConfig();compiled=null;preview=null;resetRun();$('graph').replaceChildren();message('模板已加载，请校验并编译。')}
+async function compile(){const data=await api('compile',JSON.parse($('draft').value));resetRun();compiled=data.compiled_id;preview=data.graph;draw(preview);message('校验和 LangGraph 编译成功；没有调用模型或工具。')}
+function appendEvent(e){const item=document.createElement('details');item.className='event';const heading=document.createElement('summary');heading.textContent=`#${e.sequence} ${e.type} · ${e.payload.node_id||e.payload.tool_name||''}`;const content=document.createElement('pre');content.textContent=JSON.stringify(e.payload,null,2);item.append(heading,content);$('activity').append(item)}
+async function poll(){clearTimeout(timer);if(polling)return;polling=true;try{current=await api(`runs/${runId}`);const batch=await api(`runs/${runId}/events?after_sequence=${sequence}`);for(const e of batch.events){sequence=e.sequence;history.push(e);appendEvent(e)}const s=current.snapshot;active=['running','waiting_confirmation'].includes(s.status);$('status').textContent=s.status;$('snapshot').textContent=JSON.stringify(current,null,2);$('approval').hidden=!s.confirmation;if(s.confirmation){$('prompt').textContent=s.confirmation.prompt;$('proposal').textContent=JSON.stringify(s.confirmation.context,null,2)}
+ const calls=current.calls.map(c=>c.tool_name);$('evidence').textContent=`Agent: ${current.agent} | history.query: ${calls.filter(c=>c==='history.query').length} 次 | control.apply: ${calls.filter(c=>c==='control.apply').length} 次 | 模拟扭矩: ${current.world.torque} | 结构化方案: ${s.state.data.changes?'已写回':'尚未写回'}`;
+ draw(activeGraph);if(s.error)message(`${s.error.type}: ${s.error.message}`,true);controls();if(active)timer=setTimeout(poll,600);
+ }catch(e){message('状态查询失败，将重试：'+e.message,true);timer=setTimeout(poll,1500)}finally{polling=false}}
+async function run(){if(preview.nodes.some(n=>n.type==='pi')&&!window.confirm('本次将请求真实模型，可能产生费用。所有设备能力仍为模拟。继续？'))return;resetRun();const data=await api('runs',{compiled_id:compiled,scenario:$('scenario').value,inputs:{equipment_id:'TBM-01'}});runId=data.run_id;activeGraph=data.graph;active=true;message('运行已启动；审批前不会执行模拟调整。');await poll()}
+async function approve(decision){clearTimeout(timer);try{await api(`runs/${runId}/confirm`,{confirmation_id:current.snapshot.confirmation.id,decision});message(decision==='accepted'?'已批准模拟调整。':'已拒绝。')}finally{await poll()}}
+async function action(fn){if(busy)return;busy=true;controls();try{await fn()}catch(e){message(e.message,true)}finally{busy=false;controls()}}
+$('load').onclick=()=>action(load);$('compile').onclick=()=>{compiled=null;action(compile)};$('run').onclick=()=>action(run);$('accept').onclick=()=>action(()=>approve('accepted'));$('reject').onclick=()=>action(()=>approve('rejected'));
+$('draft').oninput=()=>{invalidate();try{renderConfig()}catch{}};
+action(load);
+</script>
+</body>
+</html>

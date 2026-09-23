@@ -53,11 +53,20 @@
           "title": "Outputs",
           "type": "object"
         },
+        "type": {
+          "const": "pi",
+          "default": "pi",
+          "title": "Type",
+          "type": "string"
+        },
         "kind": {
           "const": "agent_task",
           "default": "agent_task",
           "title": "Kind",
           "type": "string"
+        },
+        "pi": {
+          "$ref": "#/$defs/PiConfig"
         },
         "goal": {
           "minLength": 1,
@@ -155,6 +164,12 @@
           "title": "Outputs",
           "type": "object"
         },
+        "type": {
+          "const": "approval",
+          "default": "approval",
+          "title": "Type",
+          "type": "string"
+        },
         "kind": {
           "const": "approval",
           "default": "approval",
@@ -227,6 +242,12 @@
           },
           "title": "Outputs",
           "type": "object"
+        },
+        "type": {
+          "const": "tool",
+          "default": "tool",
+          "title": "Type",
+          "type": "string"
         },
         "kind": {
           "const": "capability",
@@ -400,6 +421,12 @@
           "title": "Outputs",
           "type": "object"
         },
+        "type": {
+          "const": "decision",
+          "default": "decision",
+          "title": "Type",
+          "type": "string"
+        },
         "kind": {
           "const": "decision",
           "default": "decision",
@@ -460,6 +487,52 @@
       "type": "object"
     },
     "JsonValue": {},
+    "PiConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout"
+        }
+      },
+      "title": "PiConfig",
+      "type": "object"
+    },
     "Predicate": {
       "additionalProperties": false,
       "properties": {
@@ -548,7 +621,8 @@
       "default": "1.0",
       "enum": [
         "1.0",
-        "1.1"
+        "1.1",
+        "1.2"
       ],
       "title": "Spec Version",
       "type": "string"

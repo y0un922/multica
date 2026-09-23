@@ -45,11 +45,12 @@ class _Run:
 
 class WorkflowRunner:
     def __init__(self, *, registry: CapabilityRegistry, runtime: CapabilityRuntime,
-                 agent: AgentExecutor | None = None, checkpointer=None,
+                 agent: AgentExecutor | None = None, checkpointer=None, agent_factory=None,
                  store: RunStore | None = None, event_publisher: EventPublisher | None = None):
         self.registry = registry
         self.runtime = runtime
         self.agent = agent
+        self.agent_factory = agent_factory
         self.checkpointer = checkpointer if checkpointer is not None else InMemorySaver()
         self.store = store if store is not None else InMemoryRunStore()
         # Convenience for isolated demos only. Production and integration tests
@@ -142,7 +143,8 @@ class WorkflowRunner:
             await self._event(run, mapping[kind], **payload)
 
         graph = compile_workflow(spec, registry=self.registry, runtime=self.runtime,
-                                 agent=self.agent, checkpointer=self.checkpointer,
+                                 agent=self.agent, agent_factory=self.agent_factory,
+                                 checkpointer=self.checkpointer,
                                  event_sink=capture)
         config = {"configurable": {"thread_id": run_id},
                   "recursion_limit": 2 * len(spec.nodes) + 10}

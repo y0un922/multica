@@ -18,7 +18,7 @@ SYSTEM_SCHEMA = DataSchema.model_validate({
 
 def check_schema_bindings(spec, registry, order, incoming) -> list[str]:
     issues = []
-    strict = spec.spec_version == "1.1"
+    strict = spec.spec_version in ("1.1", "1.2")
     nodes = {n.id: n for n in spec.nodes}
     after = {}
     input_schema = spec.input_schema

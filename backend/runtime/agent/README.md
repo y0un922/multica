@@ -17,8 +17,11 @@ agent = PiAgentExecutor(
 runner = WorkflowRunner(registry=registry, runtime=runtime, agent=agent)
 ```
 
-On Windows, launch Node with the installed package's `bin.pi` entry point if the
-npm `pi.cmd` shim cannot be spawned without a shell. For Pi 0.85.1 this is:
+On Windows, the launcher now automatically resolves `pi` / `pi.cmd` from PATH,
+reads the adjacent npm package's `bin.pi`, and launches it with Node without a
+shell. Existing environment and Pi configuration are preserved. Native `pi.exe`
+and explicit custom commands remain supported. For nonstandard installations,
+you can still specify Node and the entry point explicitly. For Pi 0.85.1 this is:
 `command=["node", "/absolute/path/to/pi-coding-agent/dist/bundle/cli.js"]`.
 Do not use `shell=True` with prompts. Configure provider credentials outside
 source code. `agent_dir` selects an isolated Pi configuration directory.

@@ -23,6 +23,20 @@ multica/
 
 标注“待实现”的目录仅表示约定，不代表已有实现。角色 B 的实现位于 `backend/runtime/`；后端共享配置变更需与角色 C 协调。共享协议留在根级 `contracts/`，便于前后端共同使用。
 
+## 本地 Draft / Pi 联调台
+
+无需前端构建或正式平台服务：
+
+```bash
+cd backend
+uv sync
+uv run python -m demo_workbench.server
+```
+
+打开 `http://127.0.0.1:8010`，在节点配置中选择 `tool`（直接调用）或 `pi`（独立 Agent），校验编译后运行并人工确认。默认全 Tool 模板不调用模型；添加 `--enable-pi` 启用 Pi，自动继承现有配置，各节点可分别设置 provider/model/timeout。支持同一流程混合多个 Pi Agent 与工具（可能计费）。
+
+详见 [本地联调台说明](backend/demo_workbench/README.md)。这是独立 Demo 页面，不代表正式 Frontend、REST/SSE 或 Backend B 已完成。
+
 ## 接口交接
 
 角色 C 接入请先阅读：[角色C_接口交接.md](contracts/角色C_接口交接.md)。

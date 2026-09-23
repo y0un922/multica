@@ -2,7 +2,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 import operator
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Callable
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -65,6 +65,7 @@ def assign(data: dict, path: str, value: Any):
 def compile_workflow(
     spec: WorkflowSpec, *, registry: CapabilityRegistry, runtime: CapabilityRuntime,
     agent: AgentExecutor | None = None, checkpointer=None,
+    agent_factory: Callable[[AgentNode], AgentExecutor] | None = None,
     event_sink: EventSink | None = None,
 ):
     # Defensive copy: later draft edits must not mutate a compiled version.
@@ -83,8 +84,14 @@ def compile_workflow(
     validate_workflow(spec, registry)
     if any(isinstance(n, ApprovalNode) for n in spec.nodes) and checkpointer is None:
         raise ValueError("approval requires a checkpointer and a thread_id at invocation")
-    if any(isinstance(n, AgentNode) for n in spec.nodes) and agent is None:
-        raise ValueError("agent_task requires an AgentExecutor")
+    if any(isinstance(n, AgentNode) for n in spec.nodes) and agent is None and agent_factory is None:
+        raise ValueError("agent_task requires an AgentExecutor or node agent_factory")
+    # Each Pi node owns its executor configuration; factories must not execute
+    # model requests at compilation time. Legacy shared executors still work.
+    agents = {n.id: agent_factory(n.model_copy(deep=True)) if agent_factory else agent
+              for n in spec.nodes if isinstance(n, AgentNode)}
+    if any(executor is None for executor in agents.values()):
+        raise ValueError("agent_factory returned no executor")
 
     async def emit(state, kind, node=None, **details):
         if event_sink:
@@ -93,6 +100,7 @@ def compile_workflow(
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "node_id": node.id if node else None,
                 "ui_stage_id": (node.ui_stage_id or node.id) if node else None,
+                "executor_type": node.type if node else None,
                 **details,
             })
 
@@ -151,6 +159,7 @@ def compile_workflow(
                     if isinstance(node, CapabilityNode):
                         result = await invoke(node.capability, args)
                     elif isinstance(node, AgentNode):
+                        agent = agents[node.id]
                         await emit(state, "agent_thinking", node, summary="Executing agent task", goal=node.goal)
                         validate_value(args, node.input_schema, f"{node.id}.inputs")
                         agent_args = dict(goal=node.goal, context=args,

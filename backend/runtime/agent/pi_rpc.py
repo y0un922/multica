@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .bridge import CapabilityBridge
+from .launcher import resolve_pi_command
 from ..workflow.interfaces import AgentTaskContract
 
 
@@ -70,7 +71,11 @@ class PiAgentExecutor:
     async def _run(self, *, goal, context, bridge=None, contract=None):
         prompt = json.dumps({"goal": goal, "context": context},
                             ensure_ascii=False, allow_nan=False)
-        args = [*self.command, "--mode", "rpc", "--no-session", "--no-tools",
+        try:
+            command = resolve_pi_command(self.command)
+        except OSError as exc:
+            raise PiRpcError(f"Pi launch resolution failed: {exc}") from exc
+        args = [*command, "--mode", "rpc", "--no-session", "--no-tools",
                 "--no-extensions", "--no-skills", "--no-prompt-templates",
                 "--no-context-files", "--no-approve", "--system-prompt",
                 "You execute one workflow task using supplied context only. "

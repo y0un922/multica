@@ -46,7 +46,7 @@ def validate_workflow(spec: WorkflowSpec, registry: CapabilityRegistry) -> None:
             info = registry.get(cap)
             if info is None:
                 issues.append(f"{node.id}: unknown capability {cap}")
-            elif spec.spec_version == "1.1" and (info.input_schema is None or info.output_schema is None):
+            elif spec.spec_version in ("1.1", "1.2") and (info.input_schema is None or info.output_schema is None):
                 issues.append(f"{node.id}: v1.1 capability {cap} requires input_schema and output_schema")
             elif isinstance(node, AgentNode) and (info.side_effect or info.requires_approval):
                 issues.append(f"{node.id}: agent tools must be read-only; use an explicit capability node for {cap}")

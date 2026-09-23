@@ -1,9 +1,10 @@
-# 工作流数据 Schema（协议 1.1）
+# 工作流数据 Schema（协议 1.1 / 1.2）
 
 ## 版本与兼容性
 
 - `spec_version: "1.0"` 保持兼容：Schema 可省略；一旦声明，仍会执行对应的静态检查和运行时校验。
 - `spec_version: "1.1"` 为有类型模式：必须声明工作流 `input_schema`、`state_schema`；每个 Agent 节点必须声明 `input_schema`、`output_schema`；所有引用的 Capability（包括 Agent 可用工具）必须提供输入和输出 Schema。
+- `spec_version: "1.2"` 继承 1.1 的全部类型检查，并要求每个节点显式声明 `type`：`pi` / `tool` / `decision` / `approval`。解析时归一化为原有内部 kind，未知 type 或 type/kind 冲突会失败。Pi 节点新增 `pi.provider/model/timeout` 可选配置，由节点级 `agent_factory(node)` 装配。完整示例和切换规则见 [节点级 Demo](../../demo_workbench/README.md)。
 - 工作流业务版本 `version` 与协议版本独立。不要直接修改运行中版本。
 - 老字段 `required_inputs` 继续支持，与 `input_schema.required` 取并集；新工作流建议仅使用 Schema.required。
 
