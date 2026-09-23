@@ -137,7 +137,8 @@ def compile_workflow(
                             raise PermissionError(f"capability not allowed: {capability_id}")
                         arguments = JSON_OBJECT_ADAPTER.validate_python(arguments)
                         info = contracts[capability_id]
-                        validate_value(arguments, info.input_schema, f"{node.id}.{capability_id}.inputs")
+                        from .json_schema import validate_json_schema
+                        validate_json_schema(arguments, info.input_schema, f"{node.id}.{capability_id}.inputs")
                         system_context = state["system"]
                         tool_result = await runtime.invoke(
                             tool_name=capability_id,
@@ -152,7 +153,8 @@ def compile_workflow(
                         # Fail closed by default. Workflow retry policy belongs to A;
                         # never blindly replay an action after an ambiguous timeout.
                         result = require_ok(tool_result, tool_name=capability_id, node_id=node.id)
-                        validate_value(result, info.output_schema, f"{node.id}.{capability_id}.outputs")
+                        from .json_schema import validate_json_schema
+                        validate_json_schema(result, info.output_schema, f"{node.id}.{capability_id}.outputs")
                         return result
 
                     route = False

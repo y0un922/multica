@@ -16,6 +16,9 @@ class CatalogEntry(BaseModel):
     description: str
     category: Literal["data", "analysis", "action"]
     side_effect: bool
+    timeout_seconds: float = Field(default=30.0, gt=0)
+    # Preserve the complete provider JSON Schema verbatim. Validation of tool
+    # arguments/results is performed with jsonschema, not a private subset.
     input_schema: dict[str, Any]
     output_schema: dict[str, Any]
 

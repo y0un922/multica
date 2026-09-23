@@ -53,6 +53,44 @@ multica/
     test_workflow.py
 ```
 
+## 协议 v1.0 / v1.1 / v1.2
+
+节点级执行的完整协议、编译流程、安全边界和验收清单见：[NODE_LEVEL_EXECUTION.md](runtime/workflow/NODE_LEVEL_EXECUTION.md)。
+
+`v1.2` 是当前推荐的新模板格式：节点必须显式声明 `type`。`v1.0/v1.1` 继续兼容旧的 `kind` 判别方式。
+
+### v1.2 节点执行字段
+
+| 字段 | `tool` | `pi` | `decision` | `approval` |
+|---|---|---|---|---|
+| `type` | 必填 | 必填 | 必填 | 必填 |
+| `capability` | 必填 | 禁止 | 禁止 | 禁止 |
+| `goal` | 禁止 | 必填 | 禁止 | 禁止 |
+| `capabilities` | 禁止 | 可选白名单 | 禁止 | 禁止 |
+| `pi` | 禁止 | 可选节点配置 | 禁止 | 禁止 |
+| `predicate` | 禁止 | 禁止 | 必填 | 禁止 |
+| `prompt` | 禁止 | 禁止 | 禁止 | 必填 |
+
+`pi` 节点使用 `agent_factory(node)`，Tool 节点使用 `CapabilityRuntime`。两个节点可以共享相同的 inputs/outputs，从而在不改变下游流程的情况下切换执行方式。
+
+示例：
+
+```json
+{
+  "spec_version": "1.2",
+  "id": "diagnose",
+  "type": "pi",
+  "name": "异常诊断",
+  "goal": "根据当前工况完成异常诊断",
+  "capabilities": ["history.query"],
+  "pi": {"provider": "optional", "model": "optional", "timeout": 120},
+  "inputs": {"torque": {"type": "ref", "path": "$.data.torque"}},
+  "outputs": {"diagnosis": "$.data.diagnosis"}
+}
+```
+
+`type` 与内部 `kind` 的映射为：`tool → capability`、`pi → agent_task`，`decision` 和 `approval` 保持原名。未知 type 或 type/kind 冲突必须失败。不要使用 Run 级 `agent=fake/pi` 覆盖模板；执行方式取自已编译的节点。
+
 ## 协议 v1.0 / v1.1
 
 `WorkflowSpec` 的业务版本 `version` 与格式版本 `spec_version` 分离。
@@ -69,12 +107,14 @@ multica/
 
 普通节点必须有且仅有一条无条件出边，包括指向 `$end` 的结束边。decision 和 approval 必须各有一条 `when: true` 和 `when: false` 出边。此版本仅支持无环、单活跃路径的顺序与分支，不支持隐式并行。
 
-### 四种节点
+### 四种内部节点
 
-- `capability`：`capability` 指定能力 ID，通过统一 Runtime 调用。
-- `agent_task`：`goal` 和 `capabilities` 定义目标与可用只读能力，交给注入的 AgentExecutor。
+- `capability`：内部表示 `type: tool`，`capability` 指定能力 ID，通过统一 Runtime 调用。
+- `agent_task`：内部表示 `type: pi`，`goal`、`capabilities` 和结构化契约交给节点专属 AgentExecutor。
 - `decision`：通过 `predicate` 比较状态数据，支持 eq/ne/gt/ge/lt/le，不执行 Python 或 eval。该节点不接受 inputs/outputs。
 - `approval`：`prompt` 和 inputs 提供待确认内容；interrupt 恢复值必须为 `{"approved": true/false}`，按批准结果路由。可将 approved 输出绑定到 data。
+
+对外模板优先使用 v1.2 的 `type`；旧 `kind` 只作为兼容格式。
 
 所有节点支持 `id`、`name`、`ui_stage_id`。没有 ui_stage_id 时，原始事件使用节点 ID。
 
@@ -122,7 +162,8 @@ graph = compile_workflow(
     spec,
     registry=registry,
     runtime=capability_runtime,
-    agent=agent_executor,
+    # 旧版所有 Agent 节点共享一个执行器；新代码推荐按节点装配：
+    agent_factory=lambda node: build_agent_for_node(node),
     checkpointer=InMemorySaver(),
     event_sink=async_event_sink,
 )
@@ -146,7 +187,7 @@ if state.get("__interrupt__"):
 - Registry.get(id) → CapabilityInfo 或 None；真实 Registry 可返回包含相应字段的适配对象。
 - ToolRuntime.invoke(tool_name=..., arguments=..., context=ToolContext(...)) → ToolResult；按 `BACKEND_AB_INTERFACE.MD` v0.1 调用，模型定义位于 `runtime/workflow/tool_contracts.py`。`CapabilityRuntime` 仅保留为内部类型别名，不支持旧的两参数调用。能力层仍需负责自身校验，编译器也会按冻结的 Schema 检查调用边界。
 - ToolResult：`status / data / error / metadata`，错误使用结构化 ToolError。`require_ok(result, tool_name=..., node_id=...)` 在非 ok 时抛出保留 status/category/code 的 ToolInvocationError。本版默认失败，不自动重试，避免重复写操作。
-- AgentExecutor.run(goal, context, capabilities, invoke) → 字典；真实模型、提示词、结构化输出校验和调用预算由 AgentExecutor 实现。声明 Agent output_schema 后，编译器会校验嵌套字段类型及必需字段；v1.1 必须声明该 Schema。
+- AgentExecutor.run(goal, context, capabilities, invoke) → 字典；真实模型、提示词、结构化输出校验和调用预算由 AgentExecutor 实现。声明 Agent output_schema 后，编译器会校验嵌套字段类型及必需字段；v1.1/v1.2 必须声明该 Schema。v1.2 通过 `agent_factory(node)` 为每个 Pi 节点创建独立执行器。
 - EventSink：异步接收原始事件，由角色 C 做 Event Projection 与 SSE。当前 sink 异常会向外传播，生产应接入可靠事件队列/存储适配器。
 
 A 侧原始事件包括 run_started、node_started、node_finished、node_failed、run_finished、run_failed。工具调用事件及 ToolCall Trace 由 B 的 ToolRuntime 负责，A 不重复发布。审批请求通过 LangGraph interrupt 暴露，不重复发送可能在恢复时重放的 approval_required 事件。事件没有全局 seq；由持久化/投影层分配。

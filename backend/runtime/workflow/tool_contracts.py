@@ -44,7 +44,7 @@ class ToolError(ContractModel):
     code: str
     message: str
     retryable: bool
-    details: JsonObject = Field(default_factory=dict)
+    details: JsonObject | None = None
 
 
 class ToolResult(ContractModel):

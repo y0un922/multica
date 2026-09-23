@@ -40,7 +40,7 @@ class Confirmation(BaseModel):
 
 class EventBus(Protocol):
     """Public interface from the A/B document. B owns persistence and transport."""
-    async def publish(self, event: AgentEvent) -> None: ...
+    async def publish(self, event: AgentEvent) -> AgentEvent: ...
 
 
 class EventPublisher(Protocol):

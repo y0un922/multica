@@ -13,16 +13,11 @@ class CapabilityInfo:
     id: str
     requires_approval: bool = False
     side_effect: bool = False
-    input_schema: DataSchema | None = None
-    output_schema: DataSchema | None = None
-
-    def __post_init__(self):
-        for name in ("input_schema", "output_schema"):
-            schema = getattr(self, name)
-            if schema is not None:
-                schema = DataSchema.model_validate(schema)
-                object_schema(schema, f"{self.id}.{name}")
-                object.__setattr__(self, name, schema)
+    # These are the provider's complete JSON Schemas.  Do not coerce them to
+    # A's historical DataSchema subset: B is authoritative and may return
+    # $defs/$ref/anyOf/title/constraints.
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
 
 
 class CapabilityRegistry(Protocol):

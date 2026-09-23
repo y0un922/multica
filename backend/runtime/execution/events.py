@@ -33,8 +33,12 @@ class SequencedEventPublisher:
         async with self.sequence_scope(run_id) as sequence:
             event = AgentEvent(id=str(uuid4()), run_id=run_id, sequence=sequence,
                                type=event_type, timestamp=utc_now(), payload=deepcopy(payload))
-            await self.event_bus.publish(event.model_copy(deep=True))
-            return event
+            # B/EventBus is the sequence authority.  The returned event may
+            # carry a sequence allocated by durable shared storage.
+            published = await self.event_bus.publish(event.model_copy(deep=True))
+            if published is None:  # legacy demo bus compatibility
+                return event
+            return AgentEvent.model_validate(published)
 
 
 class InMemoryEventBus:
@@ -52,9 +56,17 @@ class InMemoryEventBus:
         events.append(event.model_copy(deep=True))
         self._ids.add(event.id)
 
-    async def publish(self, event: AgentEvent) -> None:
+    async def publish(self, event: AgentEvent) -> AgentEvent:
         async with self._lock:
+            events = self._events.get(event.run_id, [])
+            # A provisional sequence is accepted only when it is the next
+            # value; real B implementations may replace it authoritatively.
+            if events:
+                event = event.model_copy(update={"sequence": events[-1].sequence + 1})
+            elif event.sequence != 1:
+                event = event.model_copy(update={"sequence": 1})
             self._store(event)
+            return event.model_copy(deep=True)
 
     async def emit(self, *, run_id: str, event_type: EventType,
                    payload: JsonObject) -> AgentEvent:

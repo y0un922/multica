@@ -54,23 +54,38 @@ def check_schema_bindings(spec, registry, order, incoming) -> list[str]:
         if isinstance(node, CapabilityNode):
             info = registry.get(node.capability)
             input_contract, output_contract = info.input_schema, info.output_schema
+            # Keep provider JSON Schema untouched in the catalog/runtime. For
+            # the optional static checker, use a best-effort legacy view only
+            # when the schema happens to fit the old dialect.
+            if isinstance(input_contract, dict):
+                try:
+                    input_contract = DataSchema.model_validate(input_contract)
+                    output_contract = DataSchema.model_validate(output_contract)
+                except Exception:
+                    pass
         elif isinstance(node, AgentNode):
             input_contract, output_contract = node.input_schema, node.output_schema
         elif isinstance(node, ApprovalNode):
             output_contract = APPROVAL_OUTPUT
         if input_contract is not None:
-            missing = set(input_contract.required) - node.inputs.keys()
+            required = (input_contract.required if isinstance(input_contract, DataSchema)
+                        else input_contract.get("required", []))
+            missing = set(required) - node.inputs.keys()
             if missing:
                 issues.append(f"{key}.inputs: missing required capability/agent parameters {sorted(missing)}")
 
         for name, binding in node.inputs.items():
+            # Provider schemas can be full JSON Schema; runtime validation is
+            # authoritative, so the legacy static dialect must not reject it.
+            if isinstance(input_contract, dict):
+                continue
             try:
                 target = at_path(input_contract, [name])
                 if isinstance(binding, Constant):
                     validate_value(binding.value, target, f"{key}.inputs.{name}")
                 else:
                     sources = source_schemas(binding, env)
-                    if strict and any(s is None for s in sources):
+                    if strict and not isinstance(input_contract, dict) and any(s is None for s in sources):
                         raise ValueError(f"no declared type for {binding.path}")
                     if not all(compatible(s, target) for s in sources):
                         raise ValueError(f"incompatible type from {binding.path}")
@@ -91,7 +106,7 @@ def check_schema_bindings(spec, registry, order, incoming) -> list[str]:
                         types.append({kind})
                     else:
                         schemas = source_schemas(operand, env)
-                        if strict and any(s is None for s in schemas):
+                        if strict and not isinstance(input_contract, dict) and any(s is None for s in schemas):
                             raise ValueError(f"no declared type for {operand.path}")
                         types.append({s.type for s in schemas if s is not None})
                 for left in types[0]:
@@ -105,10 +120,13 @@ def check_schema_bindings(spec, registry, order, incoming) -> list[str]:
 
         writes = {}
         for name, path in node.outputs.items():
+            if isinstance(input_contract, dict):
+                writes[path] = [None]
+                continue
             try:
                 source = at_path(output_contract, [name], guaranteed=True)
                 target = at_path(spec.state_schema, path.split(".")[2:])
-                if strict and (source is None or target is None):
+                if strict and not isinstance(input_contract, dict) and (source is None or target is None):
                     raise ValueError("output and state paths need declared types")
                 if not compatible(source, target):
                     raise ValueError(f"incompatible output type for {path}")
