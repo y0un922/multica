@@ -35,7 +35,9 @@ def template_draft():
             pi = {k: v for k, v in node.items() if k != "capability"}
             pi.update(type="pi", goal=f"调用 {node['capability']} 完成此节点，使用 submit_result 返回符合 Schema 的结果。",
                       capabilities=[node["capability"]], pi={},
-                      input_schema=info.input_schema.as_json_schema(),
-                      output_schema=info.output_schema.as_json_schema())
+                      input_schema=(info.input_schema.as_json_schema()
+                                    if hasattr(info.input_schema, "as_json_schema") else info.input_schema),
+                      output_schema=(info.output_schema.as_json_schema()
+                                     if hasattr(info.output_schema, "as_json_schema") else info.output_schema))
             options[node["id"]] = {"tool": node.copy(), "pi": pi}
     return {"draft_id": "template-advance-anomaly", "status": "draft", "source": "template", "workflow": spec}, options

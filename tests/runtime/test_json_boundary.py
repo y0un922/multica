@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from runtime.agent.bridge import CapabilityBridge
 from runtime.execution.contracts import AgentEvent
+from runtime.workflow.json_schema import check_provider_schema
 from runtime.workflow.json_types import JSON_OBJECT_ADAPTER
 from runtime.workflow.tool_contracts import ToolError, ToolResult, require_ok
 
@@ -33,6 +34,20 @@ class JsonBoundaryTests(unittest.TestCase):
                 result = ToolResult(status="ok", data=value)
                 self.assertIs(require_ok(result, tool_name="test"), result.data)
                 self.assertEqual(result.data, value)
+
+    def test_provider_refs_are_inspected_only_at_schema_positions(self):
+        check_provider_schema({
+            "type": "object",
+            "properties": {"$ref": {"type": "string", "default": "$ref"}},
+            "$defs": {"$ref": {"type": "string", "enum": ["https://example.com/ref"]}},
+        })
+        for ref_schema in (
+            {"$ref": "https://example.com/schema"},
+            {"$dynamicRef": "https://example.com/schema"},
+            {"$recursiveRef": "#"},
+        ):
+            with self.subTest(schema=ref_schema), self.assertRaises(ValueError):
+                check_provider_schema(ref_schema)
 
     def test_strict_output_model_then_json_export(self):
         with self.assertRaises(ValidationError):
@@ -62,10 +77,14 @@ class JsonBoundaryTests(unittest.TestCase):
 
     def test_dynamic_fields_require_objects(self):
         for value in [None, [], "text", 3]:
-            for construct in [lambda v: ToolResult(status="ok", metadata=v), error, event,
+            for construct in [lambda v: ToolResult(status="ok", metadata=v), event,
                               JSON_OBJECT_ADAPTER.validate_python]:
                 with self.subTest(value=value), self.assertRaises(ValidationError):
                     construct(value)
+        for value in [[], "text", 3]:
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                error(value)
+        self.assertIsNone(error(None).details)
         self.assertEqual(error({}).details, {})
 
 

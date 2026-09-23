@@ -192,6 +192,19 @@ if state.get("__interrupt__"):
 
 A 侧原始事件包括 run_started、node_started、node_finished、node_failed、run_finished、run_failed。工具调用事件及 ToolCall Trace 由 B 的 ToolRuntime 负责，A 不重复发布。审批请求通过 LangGraph interrupt 暴露，不重复发送可能在恢复时重放的 approval_required 事件。事件没有全局 seq；由持久化/投影层分配。
 
+### 真实 B1 Golden Path 联调（本地集成分支）
+
+B Provider 的稳定三方法契约见 B 仓库 `backend/integration/PROVIDER_API.md`。A 的 `runtime.workflow.boundary.JsonBoundaryToolRuntime` 把 A ToolContext/arguments 转为 JSON dict，调用 B 的 `invoke_tool_json`；`JsonEventPublisher` 调用 B 的 `publish_event_json` 并采用 B 返回的权威 sequence。`examples.real_b1.build_real_b1_workflow()` 按 B 实际 Catalog 顺序调用六个 Tool，将经 B Schema 验证的整个 Tool JSON 对象绑定到 A state（CapabilityNode 的 `outputs: {"$": "$.data.name"}`）。本功能仅允许在 Tool 节点使用，且该节点只能有这一个 output 绑定；旧字段绑定保持不变。
+
+`tests/runtime/test_real_b1_provider.py` 使用 A `WorkflowRunner`、B `create_golden_path_backend()` 的临时 SQLite 和真实工具，验证两个场景、同一 EventBus 上的 run/node/tool 事件、错误无自动重试；**不调用 Confirmation 或 create_task**。测试环境需要同时安装 A、B；若 B 未安装，该集成测试跳过，其他 A 测试可独立运行。
+
+```bash
+# 在 backend/ 中运行（已安装 A 依赖与 B editable 包的同一 Python 环境）：
+python -m unittest discover -s ../tests/runtime -p test_real_b1_provider.py -v
+```
+
+B1 仅是当前进程的真实 A/B 接口联调，A RunStore/checkpointer 仍为内存实现，不能宣称重启恢复、跨进程序号或 B2 已通过。
+
 ### A/B v0.1 对齐范围与待办
 
 已迁移工具签名与三态模型、公开 Catalog 适配、公共四态 RunStatus、Confirmation、accepted/rejected、公共 AgentEvent、事件所有权，以及重复确认投递防重。

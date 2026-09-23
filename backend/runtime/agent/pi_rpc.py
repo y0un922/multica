@@ -105,8 +105,12 @@ class PiAgentExecutor:
                        TBM_CAPABILITIES=json.dumps(sorted(bridge.capabilities)))
             if contract is not None:
                 specs = {key: {
-                    "input_schema": info.input_schema.as_json_schema() if info.input_schema else None,
-                    "output_schema": info.output_schema.as_json_schema() if info.output_schema else None,
+                    "input_schema": (info.input_schema.as_json_schema()
+                                     if hasattr(info.input_schema, "as_json_schema")
+                                     else info.input_schema),
+                    "output_schema": (info.output_schema.as_json_schema()
+                                      if hasattr(info.output_schema, "as_json_schema")
+                                      else info.output_schema),
                 } for key, info in contract.capability_specs.items()}
                 env["TBM_CAPABILITY_SPECS"] = json.dumps(specs)
                 env["TBM_OUTPUT_SCHEMA"] = json.dumps(

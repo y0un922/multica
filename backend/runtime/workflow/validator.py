@@ -36,6 +36,8 @@ def validate_workflow(spec: WorkflowSpec, registry: CapabilityRegistry) -> None:
         elif len(edges) != 1 or edges[0].when is not None:
             issues.append(f"{node.id}: needs exactly one unconditional edge (use $end to finish)")
         paths = list(node.outputs.values())
+        if "$" in node.outputs and (not isinstance(node, CapabilityNode) or len(node.outputs) != 1):
+            issues.append(f"{node.id}.outputs: whole-result binding requires one capability output")
         for i, path in enumerate(paths):
             if any(path == other or path.startswith(other + ".") or other.startswith(path + ".")
                    for other in paths[i + 1:]):

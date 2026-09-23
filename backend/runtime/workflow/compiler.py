@@ -194,6 +194,12 @@ def compile_workflow(
                     validate_value(result, node.output_schema, f"{node.id}.outputs")
                 data = deepcopy(state["data"])
                 for key, path in node.outputs.items():
+                    # `$` binds the entire validated JSON object from a Tool.
+                    # Needed for B's nested current_status/history/diagnosis inputs;
+                    # non-capability executors keep their existing field bindings.
+                    if key == "$" and isinstance(node, CapabilityNode):
+                        assign(data, path, result)
+                        continue
                     if key not in result:
                         raise ValueError(f"{node.id}: missing output {key}")
                     assign(data, path, result[key])

@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from .interfaces import CapabilityInfo
+from .json_schema import check_provider_schema
 
 
 class CatalogEntry(BaseModel):
@@ -28,6 +29,9 @@ class CatalogRegistry:
                  confirmation_tools: set[str] | None = None):
         """confirmation_tools is A policy, not an invented B catalog field."""
         parsed = TypeAdapter(list[CatalogEntry]).validate_python(entries)
+        for entry in parsed:
+            check_provider_schema(entry.input_schema)
+            check_provider_schema(entry.output_schema)
         names = [entry.name for entry in parsed]
         if len(set(names)) != len(names):
             raise ValueError("duplicate tool name in catalog")
