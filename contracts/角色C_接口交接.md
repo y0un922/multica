@@ -108,3 +108,13 @@ uv run python -m scripts.export_contracts
 - Demo 自动接受确认只是测试脚本行为，生产必须经过 B 的用户鉴权、授权和审计。
 
 详细行为与迁移参数见 [Runner 说明](../backend/runtime/execution/README.md)。
+
+## 公共 Tool JSON 边界（已确认）
+
+- `ToolResult.data: JsonValue`：B 先使用该 Tool 的严格 Output Model 校验，再导出 JSON 值。A 不依赖 Pydantic 模型实例。
+- `ToolError.details`、`ToolResult.metadata`、`ToolCall.arguments`、`AgentEvent.payload` 均为 `dict[str, JsonValue]`。`details` 缺省为 `{}`，不接受显式 `null`。
+- JSON 值仅允许 null、boolean、有限 number、string、数组和字符串键对象；递归拒绝任意 Python 对象、非字符串键、循环引用及 NaN/Infinity。不在公共边界隐式序列化模型、日期或 Decimal。
+- `require_ok()` 成功时原样返回 `result.data`，不解析 Output Model；失败处理及 A 的 retry/fallback/fail 决策权不变。
+- A 当前没有 `ToolCall` Trace 模型（由 B 管理），但已在实际 `invoke()` 前校验 arguments；B 的 Trace 模型需采用相同约束。
+- Agent 工具桥接支持任意合法 JSON 结果，包括 null、数组和标量。现有 WorkflowSpec 的节点命名输出绑定仍要求对象结果，这是节点 DSL 的约束，不是公共 ToolResult 的约束。
+- Schema 导出描述 JSON 类型；NaN/Infinity 本就不是合法 JSON，Python 入口另外执行有限数校验。公共模型应通过正常校验构造，不能使用 `model_construct` 或事后原地写入非法对象绕过边界。

@@ -14,6 +14,7 @@ from .spec import (AgentNode, ApprovalNode, CapabilityNode, Constant, DecisionNo
                    WorkflowSpec)
 from .validator import validate_workflow
 from .schema import validate_value
+from .json_types import JSON_OBJECT_ADAPTER, JsonObject
 from .tool_contracts import ToolContext, require_ok
 
 
@@ -123,9 +124,10 @@ def compile_workflow(
                 try:
                     args = {key: resolve(binding, state) for key, binding in node.inputs.items()}
 
-                    async def invoke(capability_id: str, arguments: dict[str, Any]):
+                    async def invoke(capability_id: str, arguments: JsonObject):
                         if isinstance(node, AgentNode) and capability_id not in node.capabilities:
                             raise PermissionError(f"capability not allowed: {capability_id}")
+                        arguments = JSON_OBJECT_ADAPTER.validate_python(arguments)
                         info = contracts[capability_id]
                         validate_value(arguments, info.input_schema, f"{node.id}.{capability_id}.inputs")
                         system_context = state["system"]

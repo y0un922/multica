@@ -8,6 +8,7 @@ from typing import Any
 
 from aiohttp import web
 
+from ..workflow.json_types import JSON_VALUE_ADAPTER
 from ..workflow.schema import SchemaValueError, validate_value
 
 
@@ -99,8 +100,7 @@ class CapabilityBridge:
         try:
             async with asyncio.timeout(self.call_timeout):
                 result = await self.invoke(cap, args)
-                if not isinstance(result, dict):
-                    raise ValueError("capability result must be an object")
+                result = JSON_VALUE_ADAPTER.validate_python(result)
                 json.dumps(result, allow_nan=False)
                 return {"ok": True, "value": result}
         except Exception as exc:

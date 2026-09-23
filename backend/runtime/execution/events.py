@@ -6,7 +6,9 @@ Production must replace this with B's durable stream adapter.
 """
 import asyncio
 from copy import deepcopy
-from typing import Any, AsyncContextManager, Callable
+from typing import AsyncContextManager, Callable
+
+from ..workflow.json_types import JsonObject
 from uuid import uuid4
 
 from .contracts import AgentEvent, EventBus, EventType
@@ -27,7 +29,7 @@ class SequencedEventPublisher:
         self.sequence_scope = sequence_scope
 
     async def emit(self, *, run_id: str, event_type: EventType,
-                   payload: dict[str, Any]) -> AgentEvent:
+                   payload: JsonObject) -> AgentEvent:
         async with self.sequence_scope(run_id) as sequence:
             event = AgentEvent(id=str(uuid4()), run_id=run_id, sequence=sequence,
                                type=event_type, timestamp=utc_now(), payload=deepcopy(payload))
@@ -55,7 +57,7 @@ class InMemoryEventBus:
             self._store(event)
 
     async def emit(self, *, run_id: str, event_type: EventType,
-                   payload: dict[str, Any]) -> AgentEvent:
+                   payload: JsonObject) -> AgentEvent:
         async with self._lock:
             events = self._events.get(run_id, [])
             event = AgentEvent(

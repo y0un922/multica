@@ -3,6 +3,8 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..workflow.json_types import JsonObject
+
 RunStatus = Literal["running", "waiting_confirmation", "completed", "failed"]
 ConfirmationStatus = Literal["pending", "accepted", "rejected"]
 ConfirmationDecision = Literal["accepted", "rejected"]
@@ -21,7 +23,7 @@ class AgentEvent(BaseModel):
     sequence: int = Field(ge=1, strict=True)
     type: EventType
     timestamp: str
-    payload: dict[str, Any]
+    payload: JsonObject
 
 
 class Confirmation(BaseModel):
@@ -50,4 +52,4 @@ class EventPublisher(Protocol):
     that still require agreement with B.
     """
     async def emit(self, *, run_id: str, event_type: EventType,
-                   payload: dict[str, Any]) -> AgentEvent: ...
+                   payload: JsonObject) -> AgentEvent: ...

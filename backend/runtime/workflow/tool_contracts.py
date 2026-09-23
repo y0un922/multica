@@ -3,9 +3,11 @@
 No platform implementation or workflow state is imported here.
 """
 from enum import Enum
-from typing import Any, Protocol
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .json_types import JsonObject, JsonValue
 
 
 class ContractModel(BaseModel):
@@ -42,14 +44,18 @@ class ToolError(ContractModel):
     code: str
     message: str
     retryable: bool
-    details: dict | None = None
+    details: JsonObject = Field(default_factory=dict)
 
 
 class ToolResult(ContractModel):
+    """Success data is strict Output Model-validated, JSON-exported provider data.
+
+    This envelope checks JSON validity, not the tool-specific output schema.
+    """
     status: ToolStatus
-    data: Any | None = None
+    data: JsonValue = None
     error: ToolError | None = None
-    metadata: dict = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 class ToolInvocationError(RuntimeError):
@@ -65,7 +71,7 @@ class ToolInvocationError(RuntimeError):
                          f"[{self.category}/{self.code}] {self.message}")
 
 
-def require_ok(result: ToolResult, *, tool_name: str, node_id: str | None = None) -> Any:
+def require_ok(result: ToolResult, *, tool_name: str, node_id: str | None = None) -> JsonValue:
     """Return successful data unchanged; never turn a failed tool into empty data."""
     if result.status != ToolStatus.OK:
         raise ToolInvocationError(result, tool_name=tool_name, node_id=node_id)
@@ -73,5 +79,5 @@ def require_ok(result: ToolResult, *, tool_name: str, node_id: str | None = None
 
 
 class ToolRuntime(Protocol):
-    async def invoke(self, tool_name: str, arguments: dict,
+    async def invoke(self, tool_name: str, arguments: JsonObject,
                      context: ToolContext) -> ToolResult: ...

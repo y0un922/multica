@@ -14,6 +14,7 @@
       "title": "ErrorCategory",
       "type": "string"
     },
+    "JsonValue": {},
     "ToolError": {
       "additionalProperties": false,
       "properties": {
@@ -33,17 +34,11 @@
           "type": "boolean"
         },
         "details": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Details"
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Details",
+          "type": "object"
         }
       },
       "required": [
@@ -66,19 +61,14 @@
     }
   },
   "additionalProperties": false,
+  "description": "Success data is strict Output Model-validated, JSON-exported provider data.\n\nThis envelope checks JSON validity, not the tool-specific output schema.",
   "properties": {
     "status": {
       "$ref": "#/$defs/ToolStatus"
     },
     "data": {
-      "anyOf": [
-        {},
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Data"
+      "$ref": "#/$defs/JsonValue",
+      "default": null
     },
     "error": {
       "anyOf": [
@@ -92,7 +82,9 @@
       "default": null
     },
     "metadata": {
-      "additionalProperties": true,
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
       "title": "Metadata",
       "type": "object"
     }

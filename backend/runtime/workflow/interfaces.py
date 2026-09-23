@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol, runtime_checkable
 
+from .json_types import JsonValue
 from .schema import DataSchema, object_schema
 from .tool_contracts import (ToolContext, ToolError, ToolResult, ToolStatus,
                              ErrorCategory, ToolRuntime, require_ok)
@@ -35,7 +36,7 @@ CapabilityRuntime = ToolRuntime
 class AgentExecutor(Protocol):
     async def run(
         self, *, goal: str, context: dict[str, Any],
-        capabilities: list[str], invoke: Callable[..., Awaitable[dict[str, Any]]],
+        capabilities: list[str], invoke: Callable[..., Awaitable[JsonValue]],
     ) -> dict[str, Any]: ...
 
 
@@ -52,7 +53,7 @@ class AgentTaskContract:
 class ContractAgentExecutor(Protocol):
     async def run_with_contract(
         self, *, contract: AgentTaskContract, goal: str, context: dict[str, Any],
-        capabilities: list[str], invoke: Callable[..., Awaitable[dict[str, Any]]],
+        capabilities: list[str], invoke: Callable[..., Awaitable[JsonValue]],
     ) -> dict[str, Any]: ...
 
 

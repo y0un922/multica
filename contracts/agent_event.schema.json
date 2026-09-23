@@ -1,4 +1,7 @@
 {
+  "$defs": {
+    "JsonValue": {}
+  },
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -38,7 +41,9 @@
       "type": "string"
     },
     "payload": {
-      "additionalProperties": true,
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
       "title": "Payload",
       "type": "object"
     }
